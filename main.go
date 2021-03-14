@@ -29,25 +29,21 @@ func main() {
 		return file + ":" + strconv.Itoa(line)
 	}
 	log.Logger = log.With().Caller().Logger()
-
-	// grab config ---------------------------------------------------------------
-	//awsConfig, err := myaws.AWSConfig("us-east-1")
+	log.Info().Msg("logging setup complete")
 
 	// connect to AWS
 	awssess, err := myaws.AWSConnect("us-east-1", "stockwatch")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to AWS")
 	}
+	log.Info().Msg("AWS session setup complete")
 
 	// connect to Aurora
 	db, err := myaws.DBConnect(awssess, "stockwatch_rds", "stockwatch")
-	if err != nil {
+	if err != nil || db == nil {
 		log.Fatal().Err(err).Msg("Failed to connect to RDS")
 	}
-
-	// handle cmd line params
-	//listenAddr := flag.String("addr", ":3001", "HTTP listen address and port")
-	//flag.Parse()
+	log.Info().Msg("AWS Aurora connection setup complete")
 
 	mainloop(awssess, db)
 }
