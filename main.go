@@ -43,7 +43,7 @@ func main() {
 	if err != nil || db == nil {
 		log.Fatal().Err(err).Msg("Failed to connect to RDS")
 	}
-	log.Info().Msg("AWS Aurora connection setup complete")
+	log.Info().Msg("MySQL connection complete")
 
 	mainloop(awssess, db)
 }
