@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/jmoiron/sqlx"
-	//"github.com/rs/zerolog"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/weirdtangent/marketstack"
@@ -21,44 +22,48 @@ type TickersEODTask struct {
 	Offset     int    `json:"offset"`
 }
 
-func perform_tickers_eod(awssess *session.Session, db *sqlx.DB, body *string) (bool, error) {
-	tasklog := log.With().Str("queue", "tickers").Str("action", "eod").Logger()
+func perform_tickers_eod(ctx context.Context, body *string) (bool, error) {
+	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
+	log := log.With().Str("queue", "tickers").Str("action", "eod").Logger()
 
 	if body == nil || *body == "" {
-		return false, fmt.Errorf("Failed to get JSON body in task")
+		return false, fmt.Errorf("failed to get JSON body in task")
 	}
 
 	var EODTask TickersEODTask
 	json.NewDecoder(strings.NewReader(*body)).Decode(&EODTask)
 
 	if EODTask.TaskAction != "eod" {
-		tasklog.Error().Msg("Failed to decode JSON body in task or wrong taskAction")
-		return false, fmt.Errorf("Failed to decode JSON body in task or wrong taskAction")
+		log.Error().Msg("Failed to decode JSON body in task or wrong taskAction")
+		return false, fmt.Errorf("failed to decode JSON body in task or wrong taskAction")
 	}
 
 	ticker, err := getTickerById(db, EODTask.TickerId)
 	if err != nil {
-		tasklog.Error().Msg("Failed to find ticker_id")
-		return false, fmt.Errorf("Failed to find ticker_id")
+		log.Error().Msg("Failed to find ticker_id")
+		return false, fmt.Errorf("failed to find ticker_id")
 	}
 	exchange, err := getExchangeById(db, ticker.ExchangeId)
 	if err != nil {
-		tasklog.Error().Msg("Failed to load exchange")
-		return false, fmt.Errorf("Failed to find exchange")
+		log.Error().Msg("Failed to load exchange")
+		return false, fmt.Errorf("failed to find exchange")
 	}
 
-	tasklog = tasklog.With().Str("symbol", ticker.TickerSymbol).Str("acronym", exchange.ExchangeAcronym).Logger()
+	log = log.With().Str("symbol", ticker.TickerSymbol).Str("acronym", exchange.ExchangeAcronym).Logger()
 
-	err = fetchTickerEODs(awssess, db, ticker, exchange, EODTask.DaysBack, EODTask.Offset)
+	err = fetchTickerEODs(ctx, ticker, exchange, EODTask.DaysBack, EODTask.Offset)
 	if err != nil {
-		tasklog.Error().Err(err).Msg("Task failed, not retryable")
+		log.Error().Err(err).Msg("Task failed, not retryable")
 		return false, err
 	}
 
 	return true, nil
 }
 
-func fetchTickerEODs(awssess *session.Session, db *sqlx.DB, ticker *Ticker, exchange *Exchange, days int, offset int) error {
+func fetchTickerEODs(ctx context.Context, ticker *Ticker, exchange *Exchange, days int, offset int) error {
+	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
+	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
+
 	api_access_key, err := myaws.AWSGetSecretKV(awssess, "marketstack", "api_access_key")
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get marketstack API key, can retry")
