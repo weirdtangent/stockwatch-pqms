@@ -1,4 +1,4 @@
 #!/bin/bash
 
 cd /www/stockwatch/services/pqms
-go build && ./restart && tail -f /www/stockwatch/logs/stockwatch-pqms.log
+go build && ./restart && tail -f /www/stockwatch/logs/stockwatch-pqms.log 2>&1 | ~/bin/jslog.pl
