@@ -81,11 +81,11 @@ func mainLoop(ctx context.Context) {
 	logger.Info().Msg("starting up pqms loop")
 	for {
 		logger.Info().Msg("checking on SQS queues")
-		wasProcessed, err = getTask(ctx, "stockwatch-tickers-eod")
-		if err != nil {
-			logger.Fatal().Err(err).Msg("Fatal error, aborting loop")
-		}
-		anyProcessed = anyProcessed || wasProcessed
+		// wasProcessed, err = getTask(ctx, "stockwatch-tickers-eod")
+		// if err != nil {
+		// 	logger.Fatal().Err(err).Msg("Fatal error, aborting loop")
+		// }
+		// anyProcessed = anyProcessed || wasProcessed
 
 		wasProcessed, err = getTask(ctx, "stockwatch-tickers-news")
 		if err != nil {
