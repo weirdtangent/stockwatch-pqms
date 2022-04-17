@@ -39,12 +39,13 @@ func main() {
 		}
 		return file + ":" + strconv.Itoa(line)
 	}
-	log.Logger = log.With().Caller().Logger()
+	logger := log.With().Caller().Logger()
+	ctx = context.WithValue(ctx, ContextKey("logger"), logger)
 
 	// connect to AWS
 	awssess, err := myaws.AWSConnect("us-east-1", "stockwatch")
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to AWS")
+		logger.Fatal().Err(err).Msg("Failed to connect to AWS")
 	}
 	ctx = context.WithValue(ctx, ContextKey("awssess"), awssess)
 
@@ -53,19 +54,19 @@ func main() {
 	ctx = context.WithValue(ctx, ContextKey("db"), db)
 
 	// get morningstar api access key and host
-	ms_api_access_key, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "morningstar_rapidapi_key")
+	ms_api_access_key, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_key")
 	if err != nil {
-		log.Fatal().Err(err).
+		logger.Fatal().Err(err).
 			Msg("failed to get Morningstar API key")
 	}
-	ctx = context.WithValue(ctx, ContextKey("morningstar_apikey"), *ms_api_access_key)
+	ctx = context.WithValue(ctx, ContextKey("msfinance_apikey"), *ms_api_access_key)
 
-	ms_api_access_host, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "morningstar_rapidapi_host")
+	ms_api_access_host, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_host")
 	if err != nil {
-		log.Fatal().Err(err).
+		logger.Fatal().Err(err).
 			Msg("failed to get Morningstar API key")
 	}
-	ctx = context.WithValue(ctx, ContextKey("morningstar_apihost"), *ms_api_access_host)
+	ctx = context.WithValue(ctx, ContextKey("msfinance_apihost"), *ms_api_access_host)
 
 	// main loop --------------------------------------------------------------
 	mainLoop(ctx)
@@ -76,19 +77,19 @@ func mainLoop(ctx context.Context) {
 	var wasProcessed, anyProcessed bool
 	var err error
 
-	log := log.Logger
-	log.Info().Msg("starting up pqms loop")
+	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
+	logger.Info().Msg("starting up pqms loop")
 	for {
-		log.Info().Msg("checking on SQS queues")
+		logger.Info().Msg("checking on SQS queues")
 		wasProcessed, err = getTask(ctx, "stockwatch-tickers-eod")
 		if err != nil {
-			log.Fatal().Err(err).Msg("Fatal error, aborting loop")
+			logger.Fatal().Err(err).Msg("Fatal error, aborting loop")
 		}
 		anyProcessed = anyProcessed || wasProcessed
 
 		wasProcessed, err = getTask(ctx, "stockwatch-tickers-news")
 		if err != nil {
-			log.Fatal().Err(err).Msg("Fatal error, aborting loop")
+			logger.Fatal().Err(err).Msg("Fatal error, aborting loop")
 		}
 		anyProcessed = anyProcessed || wasProcessed
 
@@ -100,7 +101,7 @@ func mainLoop(ctx context.Context) {
 			lastSleepTime := sleepTime
 			sleepTime = math.Min(sleepTime*1.20, maxSleepTime)
 			if lastSleepTime != sleepTime {
-				log.Info().Msg(fmt.Sprintf("sleep timer extended to %.0f seconds", sleepTime))
+				logger.Info().Msg(fmt.Sprintf("sleep timer extended to %.0f seconds", sleepTime))
 			}
 			s, _ := time.ParseDuration(fmt.Sprintf("%.0fs", sleepTime))
 			time.Sleep(s)
@@ -112,14 +113,16 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
 
 	awssvc := sqs.New(awssess)
-	log := log.With().Str("queue", queueName).Logger()
+	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
+	logger = logger.With().Str("queue", queueName).Logger()
+
 	taskError := ""
 
 	urlResult, err := awssvc.GetQueueUrl(&sqs.GetQueueUrlInput{
 		QueueName: &queueName,
 	})
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get URL for queue")
+		logger.Error().Err(err).Msg("Failed to get URL for queue")
 		return false, err
 	}
 
@@ -138,7 +141,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		VisibilityTimeout:   aws.Int64(60),
 	})
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get next message in queue")
+		logger.Error().Err(err).Msg("Failed to get next message in queue")
 		return false, err
 	}
 	if len(msgResult.Messages) == 0 {
@@ -151,15 +154,15 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 
 	actionAttr, ok := messageAttributes["action"]
 	if !ok {
-		log.Error().Msg("missing attribute 'action'")
+		logger.Error().Msg("missing attribute 'action'")
 		taskError = "missing attribute 'action'"
-		return deleteTask(ctx, messageHandle, queueURL, log, taskError)
+		return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
 	}
 	action := *(actionAttr.StringValue)
 	body := msgResult.Messages[0].Body
 
-	log = log.With().Str("action", action).Logger()
-	log.Info().Msg("received message from queue")
+	logger = logger.With().Str("action", action).Logger()
+	logger.Info().Msg("received message from queue")
 	taskStart := time.Now()
 
 	// go handle whatever type of queued task this is
@@ -179,21 +182,21 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	default:
 		success = false
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
-		return deleteTask(ctx, messageHandle, queueURL, log, taskError)
+		return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
 	}
-	log.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("message handled")
+	logger.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("message handled")
 
 	if err != nil {
 		taskError = "Failed to process queued task, retrying won't help, deleting unprocessable task"
-		return deleteTask(ctx, messageHandle, queueURL, log, taskError)
+		return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
 	} else if !success {
-		log.Error().Err(err).Msg("Failed to process queued task successfully, but retryable, leaving for another attempt")
+		logger.Error().Err(err).Msg("Failed to process queued task successfully, but retryable, leaving for another attempt")
 		// returning here without deleting from the queue
 		return true, nil
 	}
 
 	// task handled, delete message from queue
-	return deleteTask(ctx, messageHandle, queueURL, log, taskError)
+	return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
 }
 
 func deleteTask(ctx context.Context, messageHandle, queueURL *string, tasklog zerolog.Logger, taskError string) (bool, error) {

@@ -3,7 +3,6 @@ package main
 import "github.com/jmoiron/sqlx"
 
 type LastDone struct {
-	LastDoneId       int64  `db:"lastdone_id"`
 	Activity         string `db:"activity"`
 	UniqueKey        string `db:"unique_key"`
 	LastStatus       string `db:"last_status"`

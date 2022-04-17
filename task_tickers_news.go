@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 type TaskTickerNewsBody struct {
@@ -23,7 +23,7 @@ const (
 
 func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
-	log := log.Logger
+	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
 
 	if body == nil || *body == "" {
 		return false, fmt.Errorf("missing task body")
@@ -46,7 +46,8 @@ func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 		return false, err
 	}
 
-	log = log.With().Str("ticker", ticker.TickerSymbol).Logger()
+	logger = logger.With().Str("ticker", ticker.TickerSymbol).Logger()
+	ctx = context.WithValue(ctx, ContextKey("logger"), logger)
 
 	lastdone := LastDone{Activity: "ticker_news", UniqueKey: ticker.TickerSymbol}
 	_ = lastdone.getByActivity(db)
@@ -54,13 +55,13 @@ func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 	if lastdone.LastDoneDatetime != "" {
 		lastDoneTime, _ := time.Parse(sqlDateTime, lastdone.LastDoneDatetime)
 		if lastDoneTime.After(time.Now().Add(minTickerNewsDelay * time.Minute)) {
-			log.Info().Msg(fmt.Sprintf("skipping ticker_news for %s, last retrieved %s", ticker.TickerSymbol, lastDoneTime.Format(sqlDateTime)))
+			logger.Info().Msg(fmt.Sprintf("skipping ticker_news for %s, last retrieved %s", ticker.TickerSymbol, lastDoneTime.Format(sqlDateTime)))
 			return true, nil
 		}
 	}
 
 	// go get news
-	log.Info().Msg(fmt.Sprintf("pulling news articles for ticker %s", ticker.TickerSymbol))
+	logger.Info().Msg(fmt.Sprintf("pulling news articles for ticker %s", ticker.TickerSymbol))
 	err = loadMSNews(ctx, ticker.TickerSymbol, ticker.TickerId)
 	if err != nil {
 		lastdone.LastStatus = fmt.Sprintf("%s", err)
