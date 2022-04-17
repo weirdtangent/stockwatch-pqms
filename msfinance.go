@@ -59,9 +59,9 @@ func loadMSNews(ctx context.Context, query string, ticker_id int64) error {
 			}
 
 			for _, story := range newsListResponse {
-				sourceId, err := getSourceId(story.SourceId)
+				sourceId, err := getSourceId(ctx, story.SourceId)
 				if err != nil {
-					logger.Error().Err(err).Msg("failed story")
+					logger.Error().Err(err).Msg("unknown source, skipping news article")
 					continue
 				}
 
