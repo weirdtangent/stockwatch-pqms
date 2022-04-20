@@ -36,20 +36,35 @@ type ArticleTicker struct {
 	UpdateDatetime  string `db:"update_datetime"`
 }
 
-func loadMSNews(ctx context.Context, query string, ticker_id int64) error {
+func loadMSNews(ctx context.Context, ticker Ticker) error {
 	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
 
 	apiKey := ctx.Value(ContextKey("msfinance_apikey")).(string)
 	apiHost := ctx.Value(ContextKey("msfinance_apihost")).(string)
 
-	autoCompleteResponse, err := msfinance.MSAutoComplete(apiKey, apiHost, query)
-	if err != nil {
-		return err
+	var err error
+
+	autoCompleteResponse := msfinance.MSAutoCompleteResponse{}
+	if ticker.MSPerformanceId == "" {
+		autoCompleteResponse, err = msfinance.MSAutoComplete(apiKey, apiHost, ticker.TickerSymbol)
+		if err != nil {
+			return err
+		}
+	} else {
+		autoCompleteResponse.Results = append(
+			autoCompleteResponse.Results,
+			msfinance.MSAutoCompleteResult{
+				Symbol:        ticker.TickerSymbol,
+				PerformanceId: ticker.MSPerformanceId,
+			})
 	}
 
 	performanceIds := make(map[string]bool)
 	for _, result := range autoCompleteResponse.Results {
 		performanceId := result.PerformanceId
+		if ticker.TickerSymbol == result.Symbol {
+			updateTickerById(ctx, ticker.TickerId, performanceId)
+		}
 		if _, ok := performanceIds[performanceId]; !ok {
 			performanceIds[performanceId] = true
 
@@ -87,13 +102,13 @@ func loadMSNews(ctx context.Context, query string, ticker_id int64) error {
 
 					err = article.createArticle(ctx)
 					if err != nil {
-						logger.Warn().Err(err).Str("id", query).Msg("failed to write new news article")
+						logger.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write new news article")
 					}
 
-					articleTicker := ArticleTicker{0, article.ArticleId, query, ticker_id, "", ""}
+					articleTicker := ArticleTicker{0, article.ArticleId, ticker.TickerSymbol, ticker.TickerId, "", ""}
 					err = articleTicker.createArticleTicker(ctx)
 					if err != nil {
-						logger.Warn().Err(err).Str("id", query).Msg("failed to write ticker(s) for new article")
+						logger.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write ticker(s) for new article")
 					}
 				}
 			}

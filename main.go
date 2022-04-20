@@ -184,7 +184,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
 		return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
 	}
-	logger.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("message handled")
+	logger.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("message handled in {task_time_ns} ns")
 
 	if err != nil {
 		taskError = "Failed to process queued task, retrying won't help, deleting unprocessable task"

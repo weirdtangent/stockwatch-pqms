@@ -62,7 +62,7 @@ func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 
 	// go get news
 	logger.Info().Msg(fmt.Sprintf("pulling news articles for ticker %s", ticker.TickerSymbol))
-	err = loadMSNews(ctx, ticker.TickerSymbol, ticker.TickerId)
+	err = loadMSNews(ctx, ticker)
 	if err != nil {
 		lastdone.LastStatus = fmt.Sprintf("%s", err)
 	} else {
