@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -39,13 +40,17 @@ func main() {
 		}
 		return file + ":" + strconv.Itoa(line)
 	}
-	logger := log.With().Caller().Logger()
-	ctx = context.WithValue(ctx, ContextKey("logger"), logger)
+	pgmPath := strings.Split(os.Args[0], `/`)
+	logTag := "stockwatch"
+	if len(pgmPath) > 1 {
+		logTag = pgmPath[len(pgmPath)-1]
+	}
+	log.Logger = log.With().Str("@tag", logTag).Caller().Logger()
 
 	// connect to AWS
 	awssess, err := myaws.AWSConnect("us-east-1", "stockwatch")
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to connect to AWS")
+		log.Fatal().Err(err).Msg("Failed to connect to AWS")
 	}
 	ctx = context.WithValue(ctx, ContextKey("awssess"), awssess)
 
@@ -56,14 +61,14 @@ func main() {
 	// get morningstar api access key and host
 	ms_api_access_key, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_key")
 	if err != nil {
-		logger.Fatal().Err(err).
+		log.Fatal().Err(err).
 			Msg("failed to get Morningstar API key")
 	}
 	ctx = context.WithValue(ctx, ContextKey("msfinance_apikey"), *ms_api_access_key)
 
 	ms_api_access_host, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_host")
 	if err != nil {
-		logger.Fatal().Err(err).
+		log.Fatal().Err(err).
 			Msg("failed to get Morningstar API key")
 	}
 	ctx = context.WithValue(ctx, ContextKey("msfinance_apihost"), *ms_api_access_host)
@@ -77,19 +82,17 @@ func mainLoop(ctx context.Context) {
 	var wasProcessed, anyProcessed bool
 	var err error
 
-	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
-	logger.Info().Msg("starting up pqms loop")
+	log.Info().Msg("starting up pqms loop")
 	for {
-		logger.Info().Msg("checking on SQS queues")
 		// wasProcessed, err = getTask(ctx, "stockwatch-tickers-eod")
 		// if err != nil {
-		// 	logger.Fatal().Err(err).Msg("Fatal error, aborting loop")
+		// 	log.Fatal().Err(err).Msg("Fatal error, aborting loop")
 		// }
 		// anyProcessed = anyProcessed || wasProcessed
 
 		wasProcessed, err = getTask(ctx, "stockwatch-tickers-news")
 		if err != nil {
-			logger.Fatal().Err(err).Msg("Fatal error, aborting loop")
+			log.Fatal().Err(err).Msg("Fatal error, aborting loop")
 		}
 		anyProcessed = anyProcessed || wasProcessed
 
@@ -101,7 +104,7 @@ func mainLoop(ctx context.Context) {
 			lastSleepTime := sleepTime
 			sleepTime = math.Min(sleepTime*1.20, maxSleepTime)
 			if lastSleepTime != sleepTime {
-				logger.Info().Msg(fmt.Sprintf("sleep timer extended to %.0f seconds", sleepTime))
+				log.Info().Float64("sleep_time", sleepTime).Msg("sleep timer extended to {sleepTime} seconds")
 			}
 			s, _ := time.ParseDuration(fmt.Sprintf("%.0fs", sleepTime))
 			time.Sleep(s)
@@ -113,8 +116,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
 
 	awssvc := sqs.New(awssess)
-	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
-	logger = logger.With().Str("queue", queueName).Logger()
+	log.With().Str("queue", queueName).Logger()
 
 	taskError := ""
 
@@ -122,7 +124,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		QueueName: &queueName,
 	})
 	if err != nil {
-		logger.Error().Err(err).Msg("Failed to get URL for queue")
+		log.Error().Err(err).Msg("Failed to get URL for queue")
 		return false, err
 	}
 
@@ -141,7 +143,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		VisibilityTimeout:   aws.Int64(60),
 	})
 	if err != nil {
-		logger.Error().Err(err).Msg("Failed to get next message in queue")
+		log.Error().Err(err).Msg("Failed to get next message in queue")
 		return false, err
 	}
 	if len(msgResult.Messages) == 0 {
@@ -154,15 +156,15 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 
 	actionAttr, ok := messageAttributes["action"]
 	if !ok {
-		logger.Error().Msg("missing attribute 'action'")
+		log.Error().Msg("missing attribute 'action'")
 		taskError = "missing attribute 'action'"
-		return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
+		return deleteTask(ctx, messageHandle, queueURL, taskError)
 	}
 	action := *(actionAttr.StringValue)
 	body := msgResult.Messages[0].Body
 
-	logger = logger.With().Str("action", action).Logger()
-	logger.Info().Msg("received message from queue")
+	log.With().Str("action", action).Logger()
+	log.Info().Msg("received message from queue")
 	taskStart := time.Now()
 
 	// go handle whatever type of queued task this is
@@ -182,24 +184,24 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	default:
 		success = false
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
-		return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
+		return deleteTask(ctx, messageHandle, queueURL, taskError)
 	}
-	logger.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("message handled in {task_time_ns} ns")
+	log.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("message handled in {task_time_ns} ns")
 
 	if err != nil {
 		taskError = "Failed to process queued task, retrying won't help, deleting unprocessable task"
-		return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
+		return deleteTask(ctx, messageHandle, queueURL, taskError)
 	} else if !success {
-		logger.Error().Err(err).Msg("Failed to process queued task successfully, but retryable, leaving for another attempt")
+		log.Error().Err(err).Msg("Failed to process queued task successfully, but retryable, leaving for another attempt")
 		// returning here without deleting from the queue
 		return true, nil
 	}
 
 	// task handled, delete message from queue
-	return deleteTask(ctx, messageHandle, queueURL, logger, taskError)
+	return deleteTask(ctx, messageHandle, queueURL, taskError)
 }
 
-func deleteTask(ctx context.Context, messageHandle, queueURL *string, tasklog zerolog.Logger, taskError string) (bool, error) {
+func deleteTask(ctx context.Context, messageHandle, queueURL *string, taskError string) (bool, error) {
 	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
 	awssvc := sqs.New(awssess)
 

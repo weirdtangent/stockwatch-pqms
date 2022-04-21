@@ -3,8 +3,9 @@ github.com/aws/aws-sdk-go v1.43.41 h1:HaazVplP8/t6SOfybQlNUmjAxLWDKdLdX8BSEHFlJd
 github.com/aws/aws-sdk-go v1.43.41/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX4oIKwKHZo=
 github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
-github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/go-sql-driver/mysql v1.5.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LBy8hT2VhHyBg=
 github.com/go-sql-driver/mysql v1.6.0 h1:BCTh4TKNUYmOmMUcQ3IipzF5prigylS7XXjEkfCHuOE=
 github.com/go-sql-driver/mysql v1.6.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LBy8hT2VhHyBg=
@@ -32,14 +33,6 @@ github.com/rs/zerolog v1.26.1/go.mod h1:/wSSJWX7lVrsOwlbyTRSOJvqRlc+WjWlfes+CiJ+
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/weirdtangent/marketstack v0.1.4 h1:Bmq0ztuWs1iVbcG2/BjSn5ScqA1dexSs1XlySBfoBQ8=
 github.com/weirdtangent/marketstack v0.1.4/go.mod h1:qCd/JgUKu/CWFLdYykphx1fj12mDPgiVT5pt/6ArJS4=
-github.com/weirdtangent/msfinance v0.0.0-20220417003837-8097cf57a9f0 h1:0uxxQfOu3Rfvc3u/PWx27ODKFsRNtlDBDFGCuIPY+5E=
-github.com/weirdtangent/msfinance v0.0.0-20220417003837-8097cf57a9f0/go.mod h1:oASoMSM/Hosz7dbVg2ALDRC6EQKcIqDiWBy9owztvNc=
-github.com/weirdtangent/msfinance v0.0.0-20220417005913-ce74852f4432 h1:GNZFF3zNtsss3c7vtSsO62eR1GYN1lvpzfo0GwXQ0Ik=
-github.com/weirdtangent/msfinance v0.0.0-20220417005913-ce74852f4432/go.mod h1:oASoMSM/Hosz7dbVg2ALDRC6EQKcIqDiWBy9owztvNc=
-github.com/weirdtangent/msfinance v0.0.0-20220417010428-c0c0ad52d89d h1:6Enr4AFwzM8DYRhKzQOZem9kMGj1pcEirPiLVnqb2IU=
-github.com/weirdtangent/msfinance v0.0.0-20220417010428-c0c0ad52d89d/go.mod h1:oASoMSM/Hosz7dbVg2ALDRC6EQKcIqDiWBy9owztvNc=
-github.com/weirdtangent/msfinance v0.0.0-20220417011019-dc455b18095b h1:+h/KQXOySYDln8cOxekuOaHqq142ImPK392Cz4rjQTg=
-github.com/weirdtangent/msfinance v0.0.0-20220417011019-dc455b18095b/go.mod h1:oASoMSM/Hosz7dbVg2ALDRC6EQKcIqDiWBy9owztvNc=
 github.com/weirdtangent/msfinance v0.0.0-20220417011538-c955273379fb h1:7E01FbRTr6xuuT8X4M6b36MmMfKQHBBKplPEvsQS9Bo=
 github.com/weirdtangent/msfinance v0.0.0-20220417011538-c955273379fb/go.mod h1:oASoMSM/Hosz7dbVg2ALDRC6EQKcIqDiWBy9owztvNc=
 github.com/weirdtangent/myaws v1.0.1 h1:p3k+3ZyYxllPs7dGNUatiq9K5BVe814inY0jeqFKwDo=

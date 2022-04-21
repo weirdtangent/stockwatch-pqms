@@ -4,12 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"regexp"
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/weirdtangent/msfinance"
 )
 
@@ -37,8 +36,6 @@ type ArticleTicker struct {
 }
 
 func loadMSNews(ctx context.Context, ticker Ticker) error {
-	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
-
 	apiKey := ctx.Value(ContextKey("msfinance_apikey")).(string)
 	apiHost := ctx.Value(ContextKey("msfinance_apihost")).(string)
 
@@ -76,24 +73,24 @@ func loadMSNews(ctx context.Context, ticker Ticker) error {
 			for _, story := range newsListResponse {
 				sourceId, err := getSourceId(ctx, story.SourceId)
 				if err != nil {
-					logger.Error().Err(err).Msg("unknown source, skipping news article")
+					log.Error().Err(err).Msg("unknown source, skipping news article")
 					continue
 				}
 
 				if existingId, err := getArticleByExternalId(ctx, sourceId, story.InternalId); err != nil {
-					logger.Info().Err(err).Str("existing_id", story.InternalId)
+					log.Info().Err(err).Str("existing_id", story.InternalId)
 				} else if existingId != 0 {
 					continue
 				} else {
 					content, err := getNewsItemContent(ctx, story.SourceId, story.InternalId)
 					if err != nil || len(content) == 0 {
-						logger.Error().Err(err).Msg("no news item content found")
+						log.Error().Err(err).Msg("no news item content found")
 						continue
 					}
 
 					publishedDateTime, err := time.Parse("2006-01-02T15:04:05-07:00", story.Published)
 					if err != nil {
-						logger.Error().Err(err).Msg("could not parse Published")
+						log.Error().Err(err).Msg("could not parse Published")
 						continue
 					}
 					publishedDate := publishedDateTime.Format("2006-01-02 15:04:05")
@@ -102,13 +99,13 @@ func loadMSNews(ctx context.Context, ticker Ticker) error {
 
 					err = article.createArticle(ctx)
 					if err != nil {
-						logger.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write new news article")
+						log.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write new news article")
 					}
 
 					articleTicker := ArticleTicker{0, article.ArticleId, ticker.TickerSymbol, ticker.TickerId, "", ""}
 					err = articleTicker.createArticleTicker(ctx)
 					if err != nil {
-						logger.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write ticker(s) for new article")
+						log.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write ticker(s) for new article")
 					}
 				}
 			}
@@ -118,8 +115,6 @@ func loadMSNews(ctx context.Context, ticker Ticker) error {
 }
 
 func getNewsItemContent(ctx context.Context, sourceId string, internalId string) (string, error) {
-	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
-
 	apiKey := ctx.Value(ContextKey("msfinance_apikey")).(string)
 	apiHost := ctx.Value(ContextKey("msfinance_apihost")).(string)
 
@@ -129,7 +124,7 @@ func getNewsItemContent(ctx context.Context, sourceId string, internalId string)
 	}
 
 	newsContent := followContent(newsDetailsResponse.ContentObj)
-	logger.Info().Msg(fmt.Sprintf("found content of %d bytes for article", len(newsContent)))
+	log.Info().Int("bytes", len(newsContent)).Msg("found content of {bytes} for article")
 	return newsContent, nil
 }
 
@@ -180,7 +175,6 @@ func (a *Article) getArticleById(ctx context.Context) error {
 
 func getArticleByExternalId(ctx context.Context, sourceId int64, externalId string) (int64, error) {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
-	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
 
 	var articleId int64
 	err := db.QueryRowx("SELECT article_id FROM article WHERE source_id=? && external_id=?", sourceId, externalId).Scan(&articleId)
@@ -188,7 +182,7 @@ func getArticleByExternalId(ctx context.Context, sourceId int64, externalId stri
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
 		} else {
-			logger.Warn().Err(err).Str("table_name", "article").Msg("Failed to check for existing record")
+			log.Warn().Err(err).Str("table_name", "article").Msg("Failed to check for existing record")
 		}
 	}
 	return articleId, err
@@ -196,19 +190,18 @@ func getArticleByExternalId(ctx context.Context, sourceId int64, externalId stri
 
 func (a *Article) createArticle(ctx context.Context) error {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
-	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
 
 	var insert = "INSERT INTO article SET source_id=?, external_id=?, published_datetime=?, pubupdated_datetime=?, title=?, body=?, article_url=?, image_url=?"
 
 	res, err := db.Exec(insert, a.SourceId, a.ExternalId, a.PublishedDatetime, a.PubUpdatedDatetime, a.Title, a.Body, a.ArticleURL, a.ImageURL)
 	if err != nil {
-		logger.Fatal().Err(err).
+		log.Fatal().Err(err).
 			Str("table_name", "article").
 			Msg("Failed on INSERT")
 	}
 	articleId, err := res.LastInsertId()
 	if err != nil || articleId == 0 {
-		logger.Fatal().Err(err).
+		log.Fatal().Err(err).
 			Str("table_name", "article").
 			Msg("Failed on LAST_INSERT_ID")
 	}
@@ -225,19 +218,18 @@ func (at *ArticleTicker) getArticleTickerById(ctx context.Context) error {
 
 func (at *ArticleTicker) createArticleTicker(ctx context.Context) error {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
-	logger := ctx.Value(ContextKey("logger")).(zerolog.Logger)
 
 	var insert = "INSERT INTO article_ticker SET article_id=?, ticker_symbol=?, ticker_id=?"
 
 	res, err := db.Exec(insert, at.ArticleId, at.TickerSymbol, at.TickerId)
 	if err != nil {
-		logger.Fatal().Err(err).
+		log.Fatal().Err(err).
 			Str("table_name", "article_ticker").
 			Msg("Failed on INSERT")
 	}
 	articleTickerId, err := res.LastInsertId()
 	if err != nil || articleTickerId == 0 {
-		logger.Fatal().Err(err).
+		log.Fatal().Err(err).
 			Str("table_name", "article_ticker").
 			Msg("Failed on LAST_INSERT_ID")
 	}

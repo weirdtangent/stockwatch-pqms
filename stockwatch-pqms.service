@@ -22,7 +22,7 @@ ExecStartPre=/bin/chown ubuntu:ubuntu /www/stockwatch/logs
 ExecStartPre=/bin/chmod 777 /www/stockwatch/logs
 StandardOutput=syslog
 StandardError=syslog
-SyslogIdentifier=stockwatch-pqms
+SyslogIdentifier=stockwatch
  
 [Install]
 WantedBy=multi-user.target

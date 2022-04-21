@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/aws/aws-sdk-go v1.43.41
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/rs/zerolog v1.26.1
 	github.com/weirdtangent/marketstack v0.1.4
