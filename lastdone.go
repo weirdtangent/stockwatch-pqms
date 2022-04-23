@@ -1,14 +1,18 @@
 package main
 
-import "github.com/jmoiron/sqlx"
+import (
+	"database/sql"
+
+	"github.com/jmoiron/sqlx"
+)
 
 type LastDone struct {
-	Activity         string `db:"activity"`
-	UniqueKey        string `db:"unique_key"`
-	LastStatus       string `db:"last_status"`
-	LastDoneDatetime string `db:"lastdone_datetime"`
-	CreateDatetime   string `db:"create_datetime"`
-	UpdateDatetime   string `db:"update_datetime"`
+	Activity         string       `db:"activity"`
+	UniqueKey        string       `db:"unique_key"`
+	LastStatus       string       `db:"last_status"`
+	LastDoneDatetime sql.NullTime `db:"lastdone_datetime"`
+	CreateDatetime   sql.NullTime `db:"create_datetime"`
+	UpdateDatetime   sql.NullTime `db:"update_datetime"`
 }
 
 // object methods -------------------------------------------------------------

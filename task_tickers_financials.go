@@ -11,19 +11,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type TaskTickerNewsBody struct {
-	TickerId     int64  `json:"ticker_id"`
-	TickerSymbol string `json:"ticker_symbol"`
-	ExchangeId   int64  `json:"exchange_id"`
-}
-
 const (
-	minTickerNewsDelay = 60
+	minTickerFinancialsDelay = 60
 )
 
-func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
+func perform_tickers_financials(ctx context.Context, body *string) (bool, error) {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
-	log := log.With().Str("action", "news").Logger()
+	log := log.With().Str("action", "financials").Logger()
 
 	if body == nil || *body == "" {
 		return false, fmt.Errorf("missing task body")
@@ -48,19 +42,19 @@ func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 
 	log = log.With().Str("ticker", ticker.TickerSymbol).Logger()
 
-	lastdone := LastDone{Activity: "ticker_news", UniqueKey: ticker.TickerSymbol}
+	lastdone := LastDone{Activity: "ticker_financials", UniqueKey: ticker.TickerSymbol}
 	_ = lastdone.getByActivity(db)
 
 	if lastdone.LastDoneDatetime.Valid {
-		if lastdone.LastDoneDatetime.Time.Add(minTickerNewsDelay * time.Minute).After(time.Now()) {
+		if lastdone.LastDoneDatetime.Time.Add(minTickerFinancialsDelay * time.Minute).After(time.Now()) {
 			log.Info().Str("symbol", ticker.TickerSymbol).Str("last_retrieved", lastdone.LastDoneDatetime.Time.Format(sqlDateTime)).Msg("skipping {action} for {symbol}, last received {last_retrieved}")
 			return true, nil
 		}
 	}
 
-	// go get news
-	log.Info().Str("symbol", ticker.TickerSymbol).Msg("pulling news articles for {symbol}")
-	err = loadMSNews(ctx, ticker)
+	// go get financials
+	log.Info().Str("symbol", ticker.TickerSymbol).Msg("pulling financials for {symbol}")
+	err = loadBBfinancials(ctx, ticker)
 	if err != nil {
 		lastdone.LastStatus = fmt.Sprintf("%s", err)
 	} else {

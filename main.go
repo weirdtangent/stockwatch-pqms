@@ -45,7 +45,7 @@ func main() {
 	if len(pgmPath) > 1 {
 		logTag = pgmPath[len(pgmPath)-1]
 	}
-	log.Logger = log.With().Str("@tag", logTag).Caller().Logger()
+	log := log.With().Str("@tag", logTag).Caller().Logger()
 
 	// connect to AWS
 	awssess, err := myaws.AWSConnect("us-east-1", "stockwatch")
@@ -55,23 +55,38 @@ func main() {
 	ctx = context.WithValue(ctx, ContextKey("awssess"), awssess)
 
 	// connect to DB
-	db := myaws.DBMustConnect(awssess, "stockwatch", "stockwatch")
+	db := myaws.DBMustConnect(awssess, "stockwatch")
 	ctx = context.WithValue(ctx, ContextKey("db"), db)
 
-	// get morningstar api access key and host
+	// get msfinance api access key and host
 	ms_api_access_key, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_key")
 	if err != nil {
 		log.Fatal().Err(err).
-			Msg("failed to get Morningstar API key")
+			Msg("failed to get msfinance API key")
 	}
 	ctx = context.WithValue(ctx, ContextKey("msfinance_apikey"), *ms_api_access_key)
 
 	ms_api_access_host, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_host")
 	if err != nil {
 		log.Fatal().Err(err).
-			Msg("failed to get Morningstar API key")
+			Msg("failed to get msfinance API key")
 	}
 	ctx = context.WithValue(ctx, ContextKey("msfinance_apihost"), *ms_api_access_host)
+
+	// get bbfinance api access key and host
+	bb_api_access_key, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "bbfinance_rapidapi_key")
+	if err != nil || *bb_api_access_key == "" {
+		log.Fatal().Err(err).
+			Msg("failed to get bbfinance API key")
+	}
+	ctx = context.WithValue(ctx, ContextKey("bbfinance_apikey"), *bb_api_access_key)
+
+	bb_api_access_host, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "bbfinance_rapidapi_host")
+	if err != nil || *bb_api_access_host == "" {
+		log.Fatal().Err(err).
+			Msg("failed to get bbfinance API key")
+	}
+	ctx = context.WithValue(ctx, ContextKey("bbfinance_apihost"), *bb_api_access_host)
 
 	// main loop --------------------------------------------------------------
 	mainLoop(ctx)
@@ -96,13 +111,19 @@ func mainLoop(ctx context.Context) {
 		}
 		anyProcessed = anyProcessed || wasProcessed
 
+		wasProcessed, err = getTask(ctx, "stockwatch-tickers-financials")
+		if err != nil {
+			log.Fatal().Err(err).Msg("Fatal error, aborting loop")
+		}
+		anyProcessed = anyProcessed || wasProcessed
+
 		// if we processed something, restart sleep to 5 sec, but don't
 		// even sleep, just go check for another task right away
 		if anyProcessed {
 			sleepTime = startSleepTime
 		} else {
 			lastSleepTime := sleepTime
-			sleepTime = math.Min(sleepTime*1.20, maxSleepTime)
+			sleepTime = math.Round(math.Min(sleepTime*1.20, maxSleepTime)*100) / 100
 			if lastSleepTime != sleepTime {
 				log.Info().Float64("sleep_time", sleepTime).Msg("sleep timer extended to {sleepTime} seconds")
 			}
@@ -163,8 +184,8 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	action := *(actionAttr.StringValue)
 	body := msgResult.Messages[0].Body
 
-	log.With().Str("action", action).Logger()
-	log.Info().Msg("received message from queue")
+	log := log.With().Str("action", action).Logger()
+	log.Info().Msg("received {action} message from queue")
 	taskStart := time.Now()
 
 	// go handle whatever type of queued task this is
@@ -181,12 +202,14 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		success, err = perform_tickers_intraday(ctx, body)
 	case "news":
 		success, err = perform_tickers_news(ctx, body)
+	case "financials":
+		success, err = perform_tickers_financials(ctx, body)
 	default:
 		success = false
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
 		return deleteTask(ctx, messageHandle, queueURL, taskError)
 	}
-	log.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("message handled in {task_time_ns} ns")
+	log.Info().Int64("task_time_ns", time.Since(taskStart).Nanoseconds()).Msg("{action} message handled in {task_time_ns} ns")
 
 	if err != nil {
 		taskError = "Failed to process queued task, retrying won't help, deleting unprocessable task"
