@@ -22,7 +22,10 @@ import (
 const (
 	startSleepTime = 5.0
 	maxSleepTime   = 600.0
-	sqlDateTime    = "2006-01-02 15:04:05"
+
+	sqlDateTime = "2006-01-02 15:04:05"
+
+	debugging = true
 )
 
 type ContextKey string
@@ -41,11 +44,18 @@ func main() {
 		return file + ":" + strconv.Itoa(line)
 	}
 	pgmPath := strings.Split(os.Args[0], `/`)
-	logTag := "stockwatch"
+	logTag := "stockwatch-pqms"
 	if len(pgmPath) > 1 {
 		logTag = pgmPath[len(pgmPath)-1]
 	}
-	log := log.With().Str("@tag", logTag).Caller().Logger()
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	if debugging {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+
+	}
+	log.Logger = log.With().Str("@tag", logTag).Caller().Logger()
 
 	// connect to AWS
 	awssess, err := myaws.AWSConnect("us-east-1", "stockwatch")
@@ -137,7 +147,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
 
 	awssvc := sqs.New(awssess)
-	log.With().Str("queue", queueName).Logger()
+	log.Logger = log.With().Str("queue", queueName).Logger()
 
 	taskError := ""
 
@@ -184,7 +194,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	action := *(actionAttr.StringValue)
 	body := msgResult.Messages[0].Body
 
-	log := log.With().Str("action", action).Logger()
+	log.Logger = log.With().Str("action", action).Logger()
 	log.Info().Msg("received {action} message from queue")
 	taskStart := time.Now()
 

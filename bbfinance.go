@@ -51,7 +51,7 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 	}
 
 	for _, result := range autoCompleteResponse.Results {
-		log := log.With().Str("symbol", result.Symbol).Logger()
+		log.Logger = log.With().Str("symbol", result.Symbol).Logger()
 		if result.Symbol != ticker.TickerSymbol || result.Currency != "USD" {
 			continue
 		}
@@ -64,13 +64,13 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 		log.Info().Msg("pulling financials for {symbol}")
 		for _, financialResult := range financialsResponse.Results {
 			resultName := financialResult.Name // "Income Statement", "Balance Sheet", "Cash Flow"
-			log := log.With().Str("form_name", resultName).Logger()
+			log.Logger = log.With().Str("form_name", resultName).Logger()
 			for _, financialSheet := range financialResult.TimeBasedSheets {
 				sheetName := financialSheet.Name // quarterly, annual, etc
-				log := log.With().Str("term_name", sheetName).Logger()
+				log.Logger = log.With().Str("term_name", sheetName).Logger()
 				for _, financialChartData := range financialSheet.ChartData {
 					chartName := financialChartData.Name // "Revenue", "Net Income", "Profit Margin", etc
-					log := log.With().Str("chart_name", chartName).Logger()
+					log.Logger = log.With().Str("chart_name", chartName).Logger()
 					chartType := financialChartData.ChartType // bar, line, etc
 					isPercentage := financialChartData.IsPercentage
 					for colKey, colData := range financialChartData.Values {

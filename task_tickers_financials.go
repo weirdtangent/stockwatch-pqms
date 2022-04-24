@@ -17,7 +17,6 @@ const (
 
 func perform_tickers_financials(ctx context.Context, body *string) (bool, error) {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
-	log := log.With().Str("action", "financials").Logger()
 
 	if body == nil || *body == "" {
 		return false, fmt.Errorf("missing task body")
@@ -40,7 +39,7 @@ func perform_tickers_financials(ctx context.Context, body *string) (bool, error)
 		return false, err
 	}
 
-	log = log.With().Str("ticker", ticker.TickerSymbol).Logger()
+	log.Logger = log.With().Str("ticker", ticker.TickerSymbol).Logger()
 
 	lastdone := LastDone{Activity: "ticker_financials", UniqueKey: ticker.TickerSymbol}
 	_ = lastdone.getByActivity(db)
