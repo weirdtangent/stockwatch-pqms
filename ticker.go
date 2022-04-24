@@ -17,7 +17,7 @@ func (t *Ticker) getBySymbol(db *sqlx.DB) error {
 	return err
 }
 
-func updateTickerById(ctx context.Context, tickerId int64, performanceId string) error {
+func updateTickerById(ctx context.Context, tickerId uint64, performanceId string) error {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
 
 	if tickerId == 0 {
@@ -28,7 +28,7 @@ func updateTickerById(ctx context.Context, tickerId int64, performanceId string)
 	if err != nil {
 		log.Warn().Err(err).
 			Str("table_name", "ticker").
-			Int64("ticker_id", tickerId).
+			Uint64("ticker_id", tickerId).
 			Msg("failed on UPDATE")
 		return err
 	}

@@ -12,9 +12,9 @@ import (
 )
 
 type TaskTickerNewsBody struct {
-	TickerId     int64  `json:"ticker_id"`
+	TickerId     uint64 `json:"ticker_id"`
 	TickerSymbol string `json:"ticker_symbol"`
-	ExchangeId   int64  `json:"exchange_id"`
+	ExchangeId   uint64 `json:"exchange_id"`
 }
 
 const (

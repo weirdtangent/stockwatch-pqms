@@ -13,8 +13,8 @@ import (
 )
 
 type Article struct {
-	ArticleId          int64  `db:"article_id"`
-	SourceId           int64  `db:"source_id"`
+	ArticleId          uint64 `db:"article_id"`
+	SourceId           uint64 `db:"source_id"`
 	ExternalId         string `db:"external_id"`
 	PublishedDatetime  string `db:"published_datetime"`
 	PubUpdatedDatetime string `db:"pubupdated_datetime"`
@@ -27,10 +27,10 @@ type Article struct {
 }
 
 type ArticleTicker struct {
-	ArticleTickerId int64  `db:"article_ticker_id"`
-	ArticleId       int64  `db:"article_id"`
+	ArticleTickerId uint64 `db:"article_ticker_id"`
+	ArticleId       uint64 `db:"article_id"`
 	TickerSymbol    string `db:"ticker_symbol"`
-	TickerId        int64  `db:"ticker_id"`
+	TickerId        uint64 `db:"ticker_id"`
 	CreateDatetime  string `db:"create_datetime"`
 	UpdateDatetime  string `db:"update_datetime"`
 }
@@ -158,10 +158,10 @@ func followContent(contentObj []msfinance.MSNewsContentObj) string {
 	return content
 }
 
-func getSourceId(ctx context.Context, source string) (int64, error) {
+func getSourceId(ctx context.Context, source string) (uint64, error) {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
 
-	var sourceId int64
+	var sourceId uint64
 	err := db.QueryRowx("SELECT source_id FROM source WHERE source_string=?", source).Scan(&sourceId)
 	return sourceId, err
 }
@@ -173,10 +173,10 @@ func (a *Article) getArticleById(ctx context.Context) error {
 	return err
 }
 
-func getArticleByExternalId(ctx context.Context, sourceId int64, externalId string) (int64, error) {
+func getArticleByExternalId(ctx context.Context, sourceId uint64, externalId string) (uint64, error) {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
 
-	var articleId int64
+	var articleId uint64
 	err := db.QueryRowx("SELECT article_id FROM article WHERE source_id=? && external_id=?", sourceId, externalId).Scan(&articleId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -199,13 +199,13 @@ func (a *Article) createArticle(ctx context.Context) error {
 			Str("table_name", "article").
 			Msg("Failed on INSERT")
 	}
-	articleId, err := res.LastInsertId()
-	if err != nil || articleId == 0 {
+	recordId, err := res.LastInsertId()
+	if err != nil || recordId == 0 {
 		log.Fatal().Err(err).
 			Str("table_name", "article").
 			Msg("Failed on LAST_INSERT_ID")
 	}
-	a.ArticleId = articleId
+	a.ArticleId = uint64(recordId)
 	return a.getArticleById(ctx)
 }
 
@@ -227,12 +227,12 @@ func (at *ArticleTicker) createArticleTicker(ctx context.Context) error {
 			Str("table_name", "article_ticker").
 			Msg("Failed on INSERT")
 	}
-	articleTickerId, err := res.LastInsertId()
-	if err != nil || articleTickerId == 0 {
+	recordId, err := res.LastInsertId()
+	if err != nil || recordId == 0 {
 		log.Fatal().Err(err).
 			Str("table_name", "article_ticker").
 			Msg("Failed on LAST_INSERT_ID")
 	}
-	at.ArticleTickerId = articleTickerId
+	at.ArticleTickerId = uint64(recordId)
 	return at.getArticleTickerById(ctx)
 }

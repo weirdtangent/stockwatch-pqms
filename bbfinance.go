@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
@@ -9,17 +10,17 @@ import (
 )
 
 type Financials struct {
-	FinancialsId    int64   `json:"financials_id"`
-	TickerId        int64   `db:"ticker_id"`
-	FormName        string  `db:"form_name"`
-	FormTermName    string  `db:"form_term_name"`
-	ChartName       string  `db:"chart_name"`
-	ChartDateString string  `db:"chart_date_string"`
-	ChartType       string  `db:"chart_type"`
-	IsPercentage    bool    `db:"is_percentage"`
-	ChartValue      float64 `db:"chart_value"`
-	CreateDatetime  string  `db:"create_datetime"`
-	UpdateDatetime  string  `db:"update_datetime"`
+	FinancialsId    uint64       `json:"financials_id"`
+	TickerId        uint64       `db:"ticker_id"`
+	FormName        string       `db:"form_name"`
+	FormTermName    string       `db:"form_term_name"`
+	ChartName       string       `db:"chart_name"`
+	ChartDateString string       `db:"chart_date_string"`
+	ChartType       string       `db:"chart_type"`
+	IsPercentage    bool         `db:"is_percentage"`
+	ChartValue      float64      `db:"chart_value"`
+	CreateDatetime  sql.NullTime `db:"create_datetime"`
+	UpdateDatetime  sql.NullTime `db:"update_datetime"`
 }
 
 func (f *Financials) createOrUpdate(ctx context.Context) error {
@@ -73,7 +74,7 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 					chartType := financialChartData.ChartType // bar, line, etc
 					isPercentage := financialChartData.IsPercentage
 					for colKey, colData := range financialChartData.Values {
-						financials := Financials{0, ticker.TickerId, resultName, sheetName, chartName, financialSheet.ColHeadings[colKey], chartType, isPercentage, colData, "", ""}
+						financials := Financials{0, ticker.TickerId, resultName, sheetName, chartName, financialSheet.ColHeadings[colKey], chartType, isPercentage, colData, sql.NullTime{}, sql.NullTime{}}
 						err := financials.createOrUpdate(ctx)
 						if err != nil {
 							log.Error().Err(err).Msg("failed to create/update financial data")
