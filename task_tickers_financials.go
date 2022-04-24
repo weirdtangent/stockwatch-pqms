@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -39,29 +40,29 @@ func perform_tickers_financials(ctx context.Context, body *string) (bool, error)
 		return false, err
 	}
 
-	log.Logger = log.With().Str("ticker", ticker.TickerSymbol).Logger()
+	log := zerolog.Ctx(ctx).With().Str("symbol", ticker.TickerSymbol).Logger()
+	ctx = log.WithContext(ctx)
 
-	lastdone := LastDone{Activity: "ticker_financials", UniqueKey: ticker.TickerSymbol}
+	lastdone := LastDone{Activity: "ticker_financials", UniqueKey: ticker.TickerSymbol, LastStatus: "failed"}
 	_ = lastdone.getByActivity(db)
 
-	if lastdone.LastDoneDatetime.Valid {
-		if lastdone.LastDoneDatetime.Time.Add(minTickerFinancialsDelay * time.Minute).After(time.Now()) {
-			log.Info().Str("symbol", ticker.TickerSymbol).Str("last_retrieved", lastdone.LastDoneDatetime.Time.Format(sqlDateTime)).Msg("skipping {action} for {symbol}, last received {last_retrieved}")
-			return true, nil
-		}
+	if lastdone.LastStatus == "success" && lastdone.LastDoneDatetime.Valid && lastdone.LastDoneDatetime.Time.Add(minTickerFinancialsDelay*time.Minute).After(time.Now()) {
+		zerolog.Ctx(ctx).Info().Str("last_retrieved", lastdone.LastDoneDatetime.Time.Format(sqlDateTime)).Msg("skipping {action} for {symbol}, recently received")
+		return true, nil
 	}
 
 	// go get financials
-	log.Info().Str("symbol", ticker.TickerSymbol).Msg("pulling financials for {symbol}")
+	zerolog.Ctx(ctx).Info().Msg("pulling financials for {symbol}")
 	err = loadBBfinancials(ctx, ticker)
-	if err != nil {
-		lastdone.LastStatus = fmt.Sprintf("%s", err)
-	} else {
+	if err == nil {
 		lastdone.LastStatus = "success"
 	}
-	lastdone.LastDoneDatetime.Time = time.Now()
+	lastdone.LastDoneDatetime = sql.NullTime{Valid: true, Time: time.Now()}
 
-	lastdone.createOrUpdate(db)
+	err = lastdone.createOrUpdate(db)
+	if err != nil {
+		zerolog.Ctx(ctx).Error().Err(err).Msg("failed to create or update lastdone")
+	}
 
 	return true, nil
 }

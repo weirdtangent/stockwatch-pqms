@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 type TaskTickerNewsBody struct {
@@ -45,29 +46,29 @@ func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 		return false, err
 	}
 
-	log.Logger = log.With().Str("ticker", ticker.TickerSymbol).Logger()
+	log := zerolog.Ctx(ctx).With().Str("symbol", ticker.TickerSymbol).Logger()
+	ctx = log.WithContext(ctx)
 
-	lastdone := LastDone{Activity: "ticker_news", UniqueKey: ticker.TickerSymbol}
-	_ = lastdone.getByActivity(db)
-
-	if lastdone.LastDoneDatetime.Valid {
-		if lastdone.LastDoneDatetime.Time.Add(minTickerNewsDelay * time.Minute).After(time.Now()) {
-			log.Info().Str("symbol", ticker.TickerSymbol).Str("last_retrieved", lastdone.LastDoneDatetime.Time.Format(sqlDateTime)).Msg("skipping {action} for {symbol}, last received {last_retrieved}")
-			return true, nil
-		}
+	// skip calling API if we've succeeded at this recently
+	lastdone := LastDone{Activity: "ticker_news", UniqueKey: ticker.TickerSymbol, LastStatus: "failed"}
+	lastdone.getByActivity(db)
+	if lastdone.LastStatus == "success" && lastdone.LastDoneDatetime.Valid && lastdone.LastDoneDatetime.Time.Add(minTickerNewsDelay*time.Minute).After(time.Now()) {
+		zerolog.Ctx(ctx).Info().Str("last_retrieved", lastdone.LastDoneDatetime.Time.Format(sqlDateTime)).Msg("skipping {action} for {symbol}, recently received")
+		return true, nil
 	}
 
 	// go get news
-	log.Info().Str("symbol", ticker.TickerSymbol).Msg("pulling news articles for {symbol}")
+	log.Info().Msg("pulling news articles for {symbol}")
 	err = loadMSNews(ctx, ticker)
-	if err != nil {
-		lastdone.LastStatus = fmt.Sprintf("%s", err)
-	} else {
+	if err == nil {
 		lastdone.LastStatus = "success"
 	}
-	lastdone.LastDoneDatetime.Time = time.Now()
+	lastdone.LastDoneDatetime = sql.NullTime{Valid: true, Time: time.Now()}
 
-	lastdone.createOrUpdate(db)
+	err = lastdone.createOrUpdate(db)
+	if err != nil {
+		zerolog.Ctx(ctx).Error().Err(err).Msg("failed to create or update lastdone")
+	}
 
 	return true, nil
 }

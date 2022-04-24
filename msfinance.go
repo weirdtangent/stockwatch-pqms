@@ -8,31 +8,31 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"github.com/weirdtangent/msfinance"
 )
 
 type Article struct {
-	ArticleId          uint64 `db:"article_id"`
-	SourceId           uint64 `db:"source_id"`
-	ExternalId         string `db:"external_id"`
-	PublishedDatetime  string `db:"published_datetime"`
-	PubUpdatedDatetime string `db:"pubupdated_datetime"`
-	Title              string `db:"title"`
-	Body               string `db:"body"`
-	ArticleURL         string `db:"article_url"`
-	ImageURL           string `db:"image_url"`
-	CreateDatetime     string `db:"create_datetime"`
-	UpdateDatetime     string `db:"update_datetime"`
+	ArticleId          uint64       `db:"article_id"`
+	SourceId           uint64       `db:"source_id"`
+	ExternalId         string       `db:"external_id"`
+	PublishedDatetime  sql.NullTime `db:"published_datetime"`
+	PubUpdatedDatetime sql.NullTime `db:"pubupdated_datetime"ctx, ctx, `
+	Title              string       `db:"title"`
+	Body               string       `db:"body"`
+	ArticleURL         string       `db:"article_url"`
+	ImageURL           string       `db:"image_url"`
+	CreateDatetime     sql.NullTime `db:"create_datetime"`
+	UpdateDatetime     sql.NullTime `db:"update_datetime"`
 }
 
 type ArticleTicker struct {
-	ArticleTickerId uint64 `db:"article_ticker_id"`
-	ArticleId       uint64 `db:"article_id"`
-	TickerSymbol    string `db:"ticker_symbol"`
-	TickerId        uint64 `db:"ticker_id"`
-	CreateDatetime  string `db:"create_datetime"`
-	UpdateDatetime  string `db:"update_datetime"`
+	ArticleTickerId uint64       `db:"article_ticker_id"`
+	ArticleId       uint64       `db:"article_id"`
+	TickerSymbol    string       `db:"ticker_symbol"`
+	TickerId        uint64       `db:"ticker_id"`
+	CreateDatetime  sql.NullTime `db:"create_datetime"`
+	UpdateDatetime  sql.NullTime `db:"update_datetime"`
 }
 
 func loadMSNews(ctx context.Context, ticker Ticker) error {
@@ -43,7 +43,7 @@ func loadMSNews(ctx context.Context, ticker Ticker) error {
 
 	autoCompleteResponse := msfinance.MSAutoCompleteResponse{}
 	if ticker.MSPerformanceId == "" {
-		autoCompleteResponse, err = msfinance.MSAutoComplete(apiKey, apiHost, ticker.TickerSymbol)
+		autoCompleteResponse, err = msfinance.MSAutoComplete(ctx, apiKey, apiHost, ticker.TickerSymbol)
 		if err != nil {
 			return err
 		}
@@ -65,7 +65,7 @@ func loadMSNews(ctx context.Context, ticker Ticker) error {
 		if _, ok := performanceIds[performanceId]; !ok {
 			performanceIds[performanceId] = true
 
-			newsListResponse, err := msfinance.MSGetNewsList(apiKey, apiHost, performanceId)
+			newsListResponse, err := msfinance.MSGetNewsList(ctx, apiKey, apiHost, performanceId)
 			if err != nil {
 				return err
 			}
@@ -73,39 +73,38 @@ func loadMSNews(ctx context.Context, ticker Ticker) error {
 			for _, story := range newsListResponse {
 				sourceId, err := getSourceId(ctx, story.SourceId)
 				if err != nil {
-					log.Error().Err(err).Msg("unknown source, skipping news article")
+					zerolog.Ctx(ctx).Error().Err(err).Msg("unknown source, skipping news article")
 					continue
 				}
 
 				if existingId, err := getArticleByExternalId(ctx, sourceId, story.InternalId); err != nil {
-					log.Info().Err(err).Str("existing_id", story.InternalId)
+					zerolog.Ctx(ctx).Info().Err(err).Str("existing_id", story.InternalId)
 				} else if existingId != 0 {
 					continue
 				} else {
 					content, err := getNewsItemContent(ctx, story.SourceId, story.InternalId)
 					if err != nil || len(content) == 0 {
-						log.Error().Err(err).Msg("no news item content found")
+						zerolog.Ctx(ctx).Error().Err(err).Msg("no news item content found")
 						continue
 					}
 
 					publishedDateTime, err := time.Parse("2006-01-02T15:04:05-07:00", story.Published)
 					if err != nil {
-						log.Error().Err(err).Msg("could not parse Published")
+						zerolog.Ctx(ctx).Error().Err(err).Msg("could not parse Published")
 						continue
 					}
-					publishedDate := publishedDateTime.Format("2006-01-02 15:04:05")
 
-					article := Article{0, sourceId, story.InternalId, publishedDate, publishedDate, story.Title, content, "", "", "", ""}
+					article := Article{0, sourceId, story.InternalId, sql.NullTime{Valid: true, Time: publishedDateTime}, sql.NullTime{Valid: true, Time: publishedDateTime}, story.Title, content, "", "", sql.NullTime{}, sql.NullTime{}}
 
 					err = article.createArticle(ctx)
 					if err != nil {
-						log.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write new news article")
+						zerolog.Ctx(ctx).Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write new news article")
 					}
 
-					articleTicker := ArticleTicker{0, article.ArticleId, ticker.TickerSymbol, ticker.TickerId, "", ""}
+					articleTicker := ArticleTicker{0, article.ArticleId, ticker.TickerSymbol, ticker.TickerId, sql.NullTime{}, sql.NullTime{}}
 					err = articleTicker.createArticleTicker(ctx)
 					if err != nil {
-						log.Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write ticker(s) for new article")
+						zerolog.Ctx(ctx).Warn().Err(err).Str("symbol", ticker.TickerSymbol).Msg("failed to write ticker(s) for new article")
 					}
 				}
 			}
@@ -118,13 +117,13 @@ func getNewsItemContent(ctx context.Context, sourceId string, internalId string)
 	apiKey := ctx.Value(ContextKey("msfinance_apikey")).(string)
 	apiHost := ctx.Value(ContextKey("msfinance_apihost")).(string)
 
-	newsDetailsResponse, err := msfinance.MSGetNewsDetails(apiKey, apiHost, internalId, sourceId)
+	newsDetailsResponse, err := msfinance.MSGetNewsDetails(ctx, apiKey, apiHost, internalId, sourceId)
 	if err != nil {
 		return "", err
 	}
 
 	newsContent := followContent(newsDetailsResponse.ContentObj)
-	log.Info().Int("bytes", len(newsContent)).Msg("found content of {bytes} for article")
+	zerolog.Ctx(ctx).Info().Int("bytes", len(newsContent)).Msg("found content of {bytes} for article")
 	return newsContent, nil
 }
 
@@ -182,7 +181,7 @@ func getArticleByExternalId(ctx context.Context, sourceId uint64, externalId str
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
 		} else {
-			log.Warn().Err(err).Str("table_name", "article").Msg("Failed to check for existing record")
+			zerolog.Ctx(ctx).Warn().Err(err).Str("table_name", "article").Msg("Failed to check for existing record")
 		}
 	}
 	return articleId, err
@@ -195,13 +194,13 @@ func (a *Article) createArticle(ctx context.Context) error {
 
 	res, err := db.Exec(insert, a.SourceId, a.ExternalId, a.PublishedDatetime, a.PubUpdatedDatetime, a.Title, a.Body, a.ArticleURL, a.ImageURL)
 	if err != nil {
-		log.Fatal().Err(err).
+		zerolog.Ctx(ctx).Fatal().Err(err).
 			Str("table_name", "article").
 			Msg("Failed on INSERT")
 	}
 	recordId, err := res.LastInsertId()
 	if err != nil || recordId == 0 {
-		log.Fatal().Err(err).
+		zerolog.Ctx(ctx).Fatal().Err(err).
 			Str("table_name", "article").
 			Msg("Failed on LAST_INSERT_ID")
 	}
@@ -223,13 +222,13 @@ func (at *ArticleTicker) createArticleTicker(ctx context.Context) error {
 
 	res, err := db.Exec(insert, at.ArticleId, at.TickerSymbol, at.TickerId)
 	if err != nil {
-		log.Fatal().Err(err).
+		zerolog.Ctx(ctx).Fatal().Err(err).
 			Str("table_name", "article_ticker").
 			Msg("Failed on INSERT")
 	}
 	recordId, err := res.LastInsertId()
 	if err != nil || recordId == 0 {
-		log.Fatal().Err(err).
+		zerolog.Ctx(ctx).Fatal().Err(err).
 			Str("table_name", "article_ticker").
 			Msg("Failed on LAST_INSERT_ID")
 	}

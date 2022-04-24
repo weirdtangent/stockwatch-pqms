@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 func (t *Ticker) getById(db *sqlx.DB) error {
@@ -26,7 +26,7 @@ func updateTickerById(ctx context.Context, tickerId uint64, performanceId string
 	var update = "UPDATE ticker SET ms_performance_id=? WHERE ticker_id=?"
 	_, err := db.Exec(update, performanceId, tickerId)
 	if err != nil {
-		log.Warn().Err(err).
+		zerolog.Ctx(ctx).Warn().Err(err).
 			Str("table_name", "ticker").
 			Uint64("ticker_id", tickerId).
 			Msg("failed on UPDATE")
