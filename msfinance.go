@@ -17,7 +17,7 @@ type Article struct {
 	SourceId           uint64       `db:"source_id"`
 	ExternalId         string       `db:"external_id"`
 	PublishedDatetime  sql.NullTime `db:"published_datetime"`
-	PubUpdatedDatetime sql.NullTime `db:"pubupdated_datetime"ctx, ctx, `
+	PubUpdatedDatetime sql.NullTime `db:"pubupdated_datetime"`
 	Title              string       `db:"title"`
 	Body               string       `db:"body"`
 	ArticleURL         string       `db:"article_url"`

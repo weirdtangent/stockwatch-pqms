@@ -54,6 +54,18 @@ func perform_tickers_financials(ctx context.Context, body *string) (bool, error)
 	// go get financials
 	zerolog.Ctx(ctx).Info().Msg("pulling financials for {symbol}")
 	err = loadBBfinancials(ctx, ticker)
+	if err != nil {
+		lastdone.LastDoneDatetime = sql.NullTime{Valid: true, Time: time.Now()}
+		lderr := lastdone.createOrUpdate(db)
+		if lderr != nil {
+			zerolog.Ctx(ctx).Error().Err(lderr).Msg("failed to create or update lastdone")
+		}
+		return true, err
+	}
+
+	// go get statistics
+	zerolog.Ctx(ctx).Info().Msg("pulling statistics for {symbol}")
+	err = loadBBstatistics(ctx, ticker)
 	if err == nil {
 		lastdone.LastStatus = "success"
 	}

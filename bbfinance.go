@@ -99,3 +99,43 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 	}
 	return nil
 }
+
+func loadBBstatistics(ctx context.Context, ticker Ticker) error {
+	apiKey := ctx.Value(ContextKey("bbfinance_apikey")).(string)
+	apiHost := ctx.Value(ContextKey("bbfinance_apihost")).(string)
+
+	var err error
+
+	autoCompleteResponse := bbfinance.BBAutoCompleteResponse{}
+	autoCompleteResponse, err = bbfinance.BBAutoComplete(ctx, apiKey, apiHost, ticker.TickerSymbol)
+	if err != nil {
+		return err
+	}
+
+	for _, result := range autoCompleteResponse.Results {
+		if result.Symbol != ticker.TickerSymbol || result.Currency != "USD" {
+			continue
+		}
+		id := result.Id
+		statisticsResponse, err := bbfinance.BBGetStatistics(ctx, apiKey, apiHost, id)
+		if err != nil || len(statisticsResponse.Results) == 0 {
+			zerolog.Ctx(ctx).Error().Err(err).Str("id", id).Msg("failed to get statistics from {id}")
+			return err
+		}
+		zerolog.Ctx(ctx).Info().Msg("pulling statistics for {symbol}")
+		for _, statisticsResults := range statisticsResponse.Results {
+			resultName := statisticsResults.Name // "Key Statistics"
+			if resultName != "Key Statistics" {
+				zerolog.Ctx(ctx).Error().Str("result_name", resultName).Msg("ignoring statistics in this result")
+				continue
+			}
+			for _, statisticEntry := range statisticsResults.Table {
+				err = ticker.createOrUpdateAttribute(ctx, statisticEntry.Name, statisticEntry.Comment, statisticEntry.Value)
+				if err != nil {
+					zerolog.Ctx(ctx).Error().Err(err).Msg("failed to create/update statistic")
+				}
+			}
+		}
+	}
+	return nil
+}

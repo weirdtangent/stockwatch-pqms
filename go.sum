@@ -53,6 +53,8 @@ github.com/weirdtangent/bbfinance v0.2.1 h1:vvDn30tT7q8AVdfi+rb5GrXpTHFAqdP5nxM0
 github.com/weirdtangent/bbfinance v0.2.1/go.mod h1:zsm1jSBGMUkdt6jmBqqRLU1CRR23gDPWYsItxP3OjZk=
 github.com/weirdtangent/bbfinance v0.2.2 h1:+wcJ+N0vjY3+sQAPc2+gpKR2au4qftCglnHlKQ/3zWs=
 github.com/weirdtangent/bbfinance v0.2.2/go.mod h1:zsm1jSBGMUkdt6jmBqqRLU1CRR23gDPWYsItxP3OjZk=
+github.com/weirdtangent/bbfinance v0.2.3 h1:UPNWm0rzNP9dMovUUgnVfjRuRXYD4aHZM5/LkM1YdcM=
+github.com/weirdtangent/bbfinance v0.2.3/go.mod h1:zsm1jSBGMUkdt6jmBqqRLU1CRR23gDPWYsItxP3OjZk=
 github.com/weirdtangent/marketstack v0.1.4 h1:Bmq0ztuWs1iVbcG2/BjSn5ScqA1dexSs1XlySBfoBQ8=
 github.com/weirdtangent/marketstack v0.1.4/go.mod h1:qCd/JgUKu/CWFLdYykphx1fj12mDPgiVT5pt/6ArJS4=
 github.com/weirdtangent/msfinance v0.0.0-20220417011538-c955273379fb h1:7E01FbRTr6xuuT8X4M6b36MmMfKQHBBKplPEvsQS9Bo=
