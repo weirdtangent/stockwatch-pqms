@@ -19,7 +19,7 @@ type TaskTickerNewsBody struct {
 }
 
 const (
-	minTickerNewsDelay = 60
+	minTickerNewsDelay = 60 * 4
 )
 
 func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
