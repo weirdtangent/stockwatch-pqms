@@ -116,13 +116,13 @@ func mainLoop(ctx context.Context) {
 
 		wasProcessed, err = getTask(ctx, "stockwatch-tickers-news")
 		if err != nil {
-			zerolog.Ctx(ctx).Fatal().Err(err).Msg("Fatal error, aborting loop")
+			zerolog.Ctx(ctx).Error().Err(err).Msg("task failed: {error}")
 		}
 		anyProcessed = anyProcessed || wasProcessed
 
 		wasProcessed, err = getTask(ctx, "stockwatch-tickers-financials")
 		if err != nil {
-			zerolog.Ctx(ctx).Fatal().Err(err).Msg("Fatal error, aborting loop")
+			zerolog.Ctx(ctx).Error().Err(err).Msg("task failed: {error}")
 		}
 		anyProcessed = anyProcessed || wasProcessed
 
@@ -132,7 +132,7 @@ func mainLoop(ctx context.Context) {
 			sleepTime = startSleepTime
 		} else {
 			lastSleepTime := sleepTime
-			sleepTime = math.Round(math.Min(sleepTime*1.20, maxSleepTime)*100) / 100
+			sleepTime = math.Round(math.Min(sleepTime*2, maxSleepTime)*100) / 100
 			if lastSleepTime != sleepTime {
 				zerolog.Ctx(ctx).Info().Float64("sleep_time", sleepTime).Msg("sleep timer extended to {sleepTime} seconds")
 			}
@@ -155,7 +155,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		QueueName: &queueName,
 	})
 	if err != nil {
-		zerolog.Ctx(ctx).Error().Err(err).Msg("Failed to get URL for queue")
+		zerolog.Ctx(ctx).Error().Err(err).Msg("failed to get URL for queue")
 		return false, err
 	}
 
@@ -174,9 +174,11 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		VisibilityTimeout:   aws.Int64(60),
 	})
 	if err != nil {
-		zerolog.Ctx(ctx).Error().Err(err).Msg("Failed to get next message in queue")
+		zerolog.Ctx(ctx).Error().Err(err).Msg("failed to get next message in queue")
 		return false, err
 	}
+
+	// no messages to handle
 	if len(msgResult.Messages) == 0 {
 		return false, nil
 	}
@@ -189,7 +191,8 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	if !ok {
 		zerolog.Ctx(ctx).Error().Msg("missing attribute 'action'")
 		taskError = "missing attribute 'action'"
-		return deleteTask(ctx, messageHandle, queueURL, taskError)
+		deleteTask(ctx, messageHandle, queueURL, taskError)
+		return true, nil
 	}
 	action := *(actionAttr.StringValue)
 	body := msgResult.Messages[0].Body
@@ -218,21 +221,25 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	default:
 		success = false
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
-		return deleteTask(ctx, messageHandle, queueURL, taskError)
-	}
-	log.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("{action} message handled in {response_time} ns")
-
-	if err != nil {
-		taskError = "Failed to process queued task, retrying won't help, deleting unprocessable task"
-		return deleteTask(ctx, messageHandle, queueURL, taskError)
-	} else if !success {
-		zerolog.Ctx(ctx).Error().Err(err).Msg("Failed to process queued task successfully, but retryable, leaving for another attempt")
-		// returning here without deleting from the queue
+		deleteTask(ctx, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 
-	// task handled, delete message from queue
-	return deleteTask(ctx, messageHandle, queueURL, taskError)
+	if success {
+		// task handled, delete message from queue
+		log.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("another '{action}' message handled successfully, took {response_time} ns")
+		deleteTask(ctx, messageHandle, queueURL, taskError)
+		return true, nil
+	}
+	if err != nil {
+		taskError = "failed to process message, retrying won't help, deleting unprocessable task"
+		log.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("failed to process '{action}' message successfully ({error}), but retryable so leaving for another attempt")
+		deleteTask(ctx, messageHandle, queueURL, taskError)
+		return true, nil
+	}
+
+	zerolog.Ctx(ctx).Info().Msg("failed to process '{action}' message successfully, but retryable so leaving for another attempt")
+	return false, nil
 }
 
 func deleteTask(ctx context.Context, messageHandle, queueURL *string, taskError string) (bool, error) {

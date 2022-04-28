@@ -19,20 +19,22 @@ type TaskTickerNewsBody struct {
 }
 
 const (
-	minTickerNewsDelay = 60 * 4
+	minTickerNewsDelay = 60 * 4 // 4 hours
 )
 
 func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
 
 	if body == nil || *body == "" {
-		return false, fmt.Errorf("missing task body")
+		zerolog.Ctx(ctx).Error().Msg("missing task body")
+		return true, fmt.Errorf("missing task body")
 	}
 	var taskTickerNewsBody TaskTickerNewsBody
 	json.NewDecoder(strings.NewReader(*body)).Decode(&taskTickerNewsBody)
 
 	if taskTickerNewsBody.TickerId == 0 && taskTickerNewsBody.TickerSymbol == "" {
-		return false, fmt.Errorf("tickerId OR tickerSymbol must be provided")
+		zerolog.Ctx(ctx).Error().Msg("tickerId OR tickerSymbol must be provided")
+		return true, fmt.Errorf("tickerId OR tickerSymbol must be provided")
 	}
 
 	ticker := Ticker{TickerId: taskTickerNewsBody.TickerId, TickerSymbol: taskTickerNewsBody.TickerSymbol}
@@ -43,11 +45,11 @@ func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 		err = ticker.getBySymbol(db)
 	}
 	if err != nil {
-		return false, err
+		zerolog.Ctx(ctx).Error().Interface("ticker", ticker).Msg("couldn't find ticker")
+		return true, err
 	}
 
-	log := zerolog.Ctx(ctx).With().Str("symbol", ticker.TickerSymbol).Logger()
-	ctx = log.WithContext(ctx)
+	zerolog.Ctx(ctx).Info().Msg("got task to possibly update news for {symbol}")
 
 	// skip calling API if we've succeeded at this recently
 	lastdone := LastDone{Activity: "ticker_news", UniqueKey: ticker.TickerSymbol, LastStatus: "failed"}
@@ -58,10 +60,12 @@ func perform_tickers_news(ctx context.Context, body *string) (bool, error) {
 	}
 
 	// go get news
-	log.Info().Msg("pulling news articles for {symbol}")
+	zerolog.Ctx(ctx).Info().Msg("pulling news articles for {symbol}")
 	err = loadMSNews(ctx, ticker)
 	if err == nil {
 		lastdone.LastStatus = "success"
+	} else {
+		lastdone.LastStatus = fmt.Sprintf("%e", err)
 	}
 	lastdone.LastDoneDatetime = sql.NullTime{Valid: true, Time: time.Now()}
 

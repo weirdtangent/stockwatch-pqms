@@ -8,6 +8,52 @@ import (
 	"github.com/rs/zerolog"
 )
 
+type Ticker struct {
+	TickerId        uint64       `db:"ticker_id"`
+	TickerSymbol    string       `db:"ticker_symbol"`
+	ExchangeId      uint64       `db:"exchange_id"`
+	TickerName      string       `db:"ticker_name"`
+	CompanyName     string       `db:"company_name"`
+	Address         string       `db:"address"`
+	City            string       `db:"city"`
+	State           string       `db:"state"`
+	Zip             string       `db:"zip"`
+	Country         string       `db:"country"`
+	Website         string       `db:"website"`
+	Phone           string       `db:"phone"`
+	Sector          string       `db:"sector"`
+	Industry        string       `db:"industry"`
+	FavIconS3Key    string       `db:"favicon_s3key"`
+	FetchDatetime   string       `db:"fetch_datetime"`
+	MSPerformanceId string       `db:"ms_performance_id"`
+	CreateDatetime  sql.NullTime `db:"create_datetime"`
+	UpdateDatetime  sql.NullTime `db:"update_datetime"`
+}
+
+type Exchange struct {
+	ExchangeId      uint64       `db:"exchange_id"`
+	ExchangeAcronym string       `db:"exchange_acronym"`
+	ExchangeMic     string       `db:"exchange_mic"`
+	ExchangeName    string       `db:"exchange_name"`
+	CountryId       uint64       `db:"country_id"`
+	City            string       `db:"city"`
+	CreateDatetime  sql.NullTime `db:"create_datetime"`
+	UpdateDatetime  sql.NullTime `db:"update_datetime"`
+}
+
+type TickerDaily struct {
+	TickerDailyId  uint64       `db:"ticker_daily_id"`
+	TickerId       uint64       `db:"ticker_id"`
+	PriceDate      string       `db:"price_date"`
+	OpenPrice      float32      `db:"open_price"`
+	HighPrice      float32      `db:"high_price"`
+	LowPrice       float32      `db:"low_price"`
+	ClosePrice     float32      `db:"close_price"`
+	Volume         float32      `db:"volume"`
+	CreateDatetime sql.NullTime `db:"create_datetime"`
+	UpdateDatetime sql.NullTime `db:"update_datetime"`
+}
+
 type TickerAttribute struct {
 	TickerAttributeId uint64       `db:"attribute_id"`
 	TickerId          uint64       `db:"ticker_id"`
@@ -28,7 +74,7 @@ func (t *Ticker) getBySymbol(db *sqlx.DB) error {
 	return err
 }
 
-func updateTickerById(ctx context.Context, tickerId uint64, performanceId string) error {
+func updateTickerPerformanceId(ctx context.Context, tickerId uint64, performanceId string) error {
 	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
 
 	if tickerId == 0 {

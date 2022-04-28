@@ -60,7 +60,7 @@ func loadMSNews(ctx context.Context, ticker Ticker) error {
 	for _, result := range autoCompleteResponse.Results {
 		performanceId := result.PerformanceId
 		if ticker.TickerSymbol == result.Symbol {
-			updateTickerById(ctx, ticker.TickerId, performanceId)
+			updateTickerPerformanceId(ctx, ticker.TickerId, performanceId)
 		}
 		if _, ok := performanceIds[performanceId]; !ok {
 			performanceIds[performanceId] = true
