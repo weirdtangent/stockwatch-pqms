@@ -83,13 +83,24 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 					chartName := financialChartData.Name      // "Revenue", "Net Income", "Profit Margin", etc
 					chartType := financialChartData.ChartType // bar, line, etc
 					isPercentage := financialChartData.IsPercentage
+					if len(financialChartData.Values) == 0 {
+						continue
+					}
 					for colKey, colData := range financialChartData.Values {
+						// we can get some bad data - data values for columns which don't exist
+						if colKey >= len(financialSheet.ColHeadings) || financialSheet.ColHeadings[colKey] == "" {
+							continue
+						}
 						datetime, err := time.Parse(dateFormat, financialSheet.ColHeadings[colKey])
-						chartDatetime := sql.NullTime{Valid: err == nil, Time: datetime}
-						financials := Financials{0, ticker.TickerId, resultName, sheetName, chartName, chartDatetime, chartType, isPercentage, colData, sql.NullTime{}, sql.NullTime{}}
-						err = financials.createOrUpdate(ctx)
 						if err != nil {
-							zerolog.Ctx(ctx).Error().Err(err).Msg("failed to create/update financial data")
+							zerolog.Ctx(ctx).Error().Err(err).Msg("failed to parse date on financial chart data")
+						} else {
+							chartDatetime := sql.NullTime{Valid: err == nil, Time: datetime}
+							financials := Financials{0, ticker.TickerId, resultName, sheetName, chartName, chartDatetime, chartType, isPercentage, colData, sql.NullTime{}, sql.NullTime{}}
+							err = financials.createOrUpdate(ctx)
+							if err != nil {
+								zerolog.Ctx(ctx).Error().Err(err).Msg("failed to create/update financial data")
+							}
 						}
 					}
 				}

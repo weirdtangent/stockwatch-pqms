@@ -32,9 +32,9 @@ func perform_tickers_financials(ctx context.Context, body *string) (bool, error)
 	ticker := Ticker{TickerId: taskTickerNewsBody.TickerId, TickerSymbol: taskTickerNewsBody.TickerSymbol}
 	var err error
 	if ticker.TickerId > 0 {
-		err = ticker.getById(db)
+		err = ticker.getById(ctx)
 	} else {
-		err = ticker.getBySymbol(db)
+		err = ticker.getBySymbol(ctx)
 	}
 	if err != nil {
 		return false, err

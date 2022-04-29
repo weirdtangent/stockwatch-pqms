@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -23,9 +24,20 @@ const (
 	startSleepTime = 5.0
 	maxSleepTime   = 600.0
 
+	awsRegion            = "us-east-1"
+	awsPrivateBucketName = "stockwatch-private"
+
 	sqlDateTime = "2006-01-02 15:04:05"
 
 	debugging = true
+)
+
+var (
+	// regexs
+	absoluteUrl         = regexp.MustCompile(`^https?\://\S+`)
+	relativeProtocolUrl = regexp.MustCompile(`^//\S+`)
+	getProtocolUrl      = regexp.MustCompile(`^https?\:`)
+	relativePathUrl     = regexp.MustCompile(`^/[^/]\S+`)
 )
 
 type ContextKey string
@@ -108,19 +120,7 @@ func mainLoop(ctx context.Context) {
 
 	zerolog.Ctx(ctx).Info().Msg("starting up pqms loop")
 	for {
-		// wasProcessed, err = getTask(ctx, "stockwatch-tickers-eod")
-		// if err != nil {
-		//zerolog.Ctx(ctx).Fatal().Err(err).Msg("Fatal error, aborting loop")
-		// }
-		// anyProcessed = anyProcessed || wasProcessed
-
-		wasProcessed, err = getTask(ctx, "stockwatch-tickers-news")
-		if err != nil {
-			zerolog.Ctx(ctx).Error().Err(err).Msg("task failed: {error}")
-		}
-		anyProcessed = anyProcessed || wasProcessed
-
-		wasProcessed, err = getTask(ctx, "stockwatch-tickers-financials")
+		wasProcessed, err = getTask(ctx, "stockwatch-tickers")
 		if err != nil {
 			zerolog.Ctx(ctx).Error().Err(err).Msg("task failed: {error}")
 		}
@@ -218,6 +218,8 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		success, err = perform_tickers_news(ctx, body)
 	case "financials":
 		success, err = perform_tickers_financials(ctx, body)
+	case "favicon":
+		success, err = perform_tickers_favicon(ctx, body)
 	default:
 		success = false
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
