@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
@@ -12,10 +11,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
 	"golang.org/x/net/html"
 )
 
@@ -29,56 +25,62 @@ const (
 	minTickerFavIconDelay = 60 * 24 * 30 // 30 days
 )
 
-func perform_tickers_favicon(ctx context.Context, body *string) (bool, error) {
-	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
+func perform_tickers_favicon(deps *Dependencies, body *string) (bool, error) {
+	db := deps.db
+	sublog := deps.logger
 
 	if body == nil || *body == "" {
-		zerolog.Ctx(ctx).Error().Msg("missing task body")
+		sublog.Error().Msg("missing task body")
 		return true, fmt.Errorf("missing task body")
 	}
 	var taskTickerFavIconBody TaskTickerFavIconBody
 	json.NewDecoder(strings.NewReader(*body)).Decode(&taskTickerFavIconBody)
 
 	if taskTickerFavIconBody.TickerId == 0 && taskTickerFavIconBody.TickerSymbol == "" {
-		zerolog.Ctx(ctx).Error().Msg("tickerId OR tickerSymbol must be provided")
+		sublog.Error().Msg("tickerId OR tickerSymbol must be provided")
 		return true, fmt.Errorf("tickerId OR tickerSymbol must be provided")
 	}
 
 	ticker := Ticker{TickerId: taskTickerFavIconBody.TickerId, TickerSymbol: taskTickerFavIconBody.TickerSymbol}
 	var err error
 	if ticker.TickerId > 0 {
-		err = ticker.getById(ctx)
+		err = ticker.getById(deps)
 	} else {
-		err = ticker.getBySymbol(ctx)
+		err = ticker.getBySymbol(deps)
 	}
 	if err != nil {
-		zerolog.Ctx(ctx).Error().Interface("ticker", ticker).Msg("couldn't find ticker")
+		sublog.Error().Interface("ticker", ticker).Msg("couldn't find ticker")
 		return true, err
 	}
 
-	zerolog.Ctx(ctx).Info().Msg("got task to possibly update favicon for {symbol}")
+	newlog := sublog.With().Str("symbol", ticker.TickerSymbol).Logger()
+	sublog = &newlog
+
+	sublog.Info().Msg("got task to possibly update favicon for {symbol}")
 
 	// skip calling API if we've succeeded at this recently
 	lastdone := LastDone{Activity: "ticker_favicon", UniqueKey: ticker.TickerSymbol, LastStatus: "failed"}
 	lastdone.getByActivity(db)
 	if lastdone.LastStatus == "success" && lastdone.LastDoneDatetime.Valid && lastdone.LastDoneDatetime.Time.Add(minTickerFavIconDelay*time.Minute).After(time.Now()) {
-		zerolog.Ctx(ctx).Info().Str("last_retrieved", lastdone.LastDoneDatetime.Time.Format(sqlDateTime)).Msg("skipping {action} for {symbol}, recently received")
+		sublog.Info().Str("last_retrieved", lastdone.LastDoneDatetime.Time.Format(sqlDateTime)).Msg("skipping {action} for {symbol}, recently received")
 		return true, nil
 	}
 
 	// go get favicon
-	err = saveFavIcon(ctx, ticker)
+	err = saveFavIcon(deps, ticker)
 
 	return true, err
 }
 
-func saveFavIcon(ctx context.Context, ticker Ticker) error {
-	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
+func saveFavIcon(deps *Dependencies, ticker Ticker) error {
+	awssess := deps.awssess
+	sublog := deps.logger
+
 	iconUrl := ""
 
 	if ticker.Website == "" {
 		ticker.FavIconS3Key = "none"
-		ticker.createOrUpdate(ctx)
+		ticker.createOrUpdate(deps)
 		return fmt.Errorf("website not defined for symbol")
 	}
 
@@ -121,7 +123,7 @@ func saveFavIcon(ctx context.Context, ticker Ticker) error {
 			iconUrl = ""
 		}
 	} else {
-		zerolog.Ctx(ctx).Error().Err(err).Str("url", ticker.Website).Msg("failed to get website page")
+		sublog.Error().Err(err).Str("url", ticker.Website).Msg("failed to get website page")
 	}
 
 	if iconUrl != "" {
@@ -139,12 +141,12 @@ func saveFavIcon(ctx context.Context, ticker Ticker) error {
 	} else {
 		iconUrl = ticker.Website + "/favicon.ico"
 	}
-	zerolog.Ctx(ctx).Info().Str("url", iconUrl).Msg("getting favicon.ico from {url}")
+	sublog.Info().Str("url", iconUrl).Msg("getting favicon.ico from {url}")
 
 	resp, err = http.Get(iconUrl)
-	if err != nil {
+	if err != nil || resp.StatusCode != http.StatusOK {
 		ticker.FavIconS3Key = "none"
-		ticker.createOrUpdate(ctx)
+		ticker.createOrUpdate(deps)
 		return err
 	}
 	body, err := ioutil.ReadAll(resp.Body)
@@ -169,7 +171,7 @@ func saveFavIcon(ctx context.Context, ticker Ticker) error {
 		return err
 	}
 	ticker.FavIconS3Key = s3Key
-	ticker.createOrUpdate(ctx)
+	ticker.createOrUpdate(deps)
 
 	return nil
 }

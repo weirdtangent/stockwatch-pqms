@@ -1,23 +1,13 @@
 package main
 
 import (
-	//"flag"
-	"context"
 	"fmt"
 	"math"
-	"os"
 	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-
-	"github.com/weirdtangent/myaws"
 )
 
 const (
@@ -43,88 +33,44 @@ var (
 type ContextKey string
 
 func main() {
-	// setup logging -------------------------------------------------------------
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	// alter the caller() return to only include the last directory
-	zerolog.CallerMarshalFunc = func(file string, line int) string {
-		parts := strings.Split(file, "/")
-		if len(parts) > 1 {
-			return strings.Join(parts[len(parts)-2:], "/") + ":" + strconv.Itoa(line)
-		}
-		return file + ":" + strconv.Itoa(line)
-	}
-	pgmPath := strings.Split(os.Args[0], `/`)
-	logTag := "stockwatch-pqms"
-	if len(pgmPath) > 1 {
-		logTag = pgmPath[len(pgmPath)-1]
-	}
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	if debugging {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	deps := &Dependencies{}
 
-	}
-	log := log.Logger.With().Str("@tag", logTag).Caller().Logger()
-	ctx := log.WithContext(context.Background())
+	setupLogging(deps)
+	setupAWS(deps)
+	setupSecrets(deps)
 
-	// connect to AWS
-	awssess, err := myaws.AWSConnect("us-east-1", "stockwatch")
-	if err != nil {
-		zerolog.Ctx(ctx).Fatal().Err(err).Msg("Failed to connect to AWS")
-	}
-	ctx = context.WithValue(ctx, ContextKey("awssess"), awssess)
-
-	// connect to DB
-	db := myaws.DBMustConnect(awssess, "stockwatch")
-	ctx = context.WithValue(ctx, ContextKey("db"), db)
-
-	// get msfinance api access key and host
-	ms_api_access_key, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_key")
-	if err != nil {
-		zerolog.Ctx(ctx).Fatal().Err(err).
-			Msg("failed to get msfinance API key")
-	}
-	ctx = context.WithValue(ctx, ContextKey("msfinance_apikey"), *ms_api_access_key)
-
-	ms_api_access_host, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "msfinance_rapidapi_host")
-	if err != nil {
-		zerolog.Ctx(ctx).Fatal().Err(err).
-			Msg("failed to get msfinance API key")
-	}
-	ctx = context.WithValue(ctx, ContextKey("msfinance_apihost"), *ms_api_access_host)
-
-	// get bbfinance api access key and host
-	bb_api_access_key, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "bbfinance_rapidapi_key")
-	if err != nil || *bb_api_access_key == "" {
-		zerolog.Ctx(ctx).Fatal().Err(err).
-			Msg("failed to get bbfinance API key")
-	}
-	ctx = context.WithValue(ctx, ContextKey("bbfinance_apikey"), *bb_api_access_key)
-
-	bb_api_access_host, err := myaws.AWSGetSecretKV(awssess, "stockwatch", "bbfinance_rapidapi_host")
-	if err != nil || *bb_api_access_host == "" {
-		zerolog.Ctx(ctx).Fatal().Err(err).
-			Msg("failed to get bbfinance API key")
-	}
-	ctx = context.WithValue(ctx, ContextKey("bbfinance_apihost"), *bb_api_access_host)
-
-	// main loop --------------------------------------------------------------
-	mainLoop(ctx)
+	mainLoop(deps)
 }
 
-func mainLoop(ctx context.Context) {
+func mainLoop(deps *Dependencies) {
+	sublog := deps.logger
+
 	var sleepTime float64 = startSleepTime
 	var wasProcessed, anyProcessed bool
 	var err error
 
-	zerolog.Ctx(ctx).Info().Msg("starting up pqms loop")
+	sublog.Info().Msg("starting up pqms loop")
+	timer := time.Now()
+	count := 0
 	for {
-		wasProcessed, err = getTask(ctx, "stockwatch-tickers")
+		// if we checked more than 1/sec over the last minute
+		// force a 5 minute pause and set sleep to max!
+		if time.Since(timer).Minutes() > 1.0 {
+			if count > 60 {
+				sublog.Warn().Int("count", count).Float64("min", time.Since(timer).Minutes()).Msg("exceeded max check, {count} over last {min} mins, pausing!")
+				time.Sleep(5 * time.Minute)
+				sleepTime = maxSleepTime
+			}
+			count = 0
+			timer = time.Now()
+		}
+
+		wasProcessed, err = getTask(deps, "stockwatch-tickers")
 		if err != nil {
-			zerolog.Ctx(ctx).Error().Err(err).Msg("task failed: {error}")
+			sublog.Error().Err(err).Msg("task failed: {error}")
 		}
 		anyProcessed = anyProcessed || wasProcessed
+		count++
 
 		// if we processed something, restart sleep to 5 sec, but don't
 		// even sleep, just go check for another task right away
@@ -134,7 +80,7 @@ func mainLoop(ctx context.Context) {
 			lastSleepTime := sleepTime
 			sleepTime = math.Round(math.Min(sleepTime*2, maxSleepTime)*100) / 100
 			if lastSleepTime != sleepTime {
-				zerolog.Ctx(ctx).Info().Float64("sleep_time", sleepTime).Msg("sleep timer extended to {sleepTime} seconds")
+				sublog.Info().Float64("sleep_time", sleepTime).Msg("sleep timer extended to {sleepTime} seconds")
 			}
 			s, _ := time.ParseDuration(fmt.Sprintf("%.0fs", sleepTime))
 			time.Sleep(s)
@@ -142,12 +88,11 @@ func mainLoop(ctx context.Context) {
 	}
 }
 
-func getTask(ctx context.Context, queueName string) (bool, error) {
-	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
+func getTask(deps *Dependencies, queueName string) (bool, error) {
+	awssess := deps.awssess
+	sublog := deps.logger
 
 	awssvc := sqs.New(awssess)
-	log := zerolog.Ctx(ctx).With().Str("queue", queueName).Logger()
-	ctx = log.WithContext(ctx)
 
 	taskError := ""
 
@@ -155,7 +100,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		QueueName: &queueName,
 	})
 	if err != nil {
-		zerolog.Ctx(ctx).Error().Err(err).Msg("failed to get URL for queue")
+		sublog.Error().Err(err).Msg("failed to get URL for queue")
 		return false, err
 	}
 
@@ -174,7 +119,7 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 		VisibilityTimeout:   aws.Int64(60),
 	})
 	if err != nil {
-		zerolog.Ctx(ctx).Error().Err(err).Msg("failed to get next message in queue")
+		sublog.Error().Err(err).Msg("failed to get next message in queue")
 		return false, err
 	}
 
@@ -189,17 +134,21 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 
 	actionAttr, ok := messageAttributes["action"]
 	if !ok {
-		zerolog.Ctx(ctx).Error().Msg("missing attribute 'action'")
+		sublog.Error().Msg("missing attribute 'action'")
 		taskError = "missing attribute 'action'"
-		deleteTask(ctx, messageHandle, queueURL, taskError)
+		deleteTask(deps, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 	action := *(actionAttr.StringValue)
 	body := msgResult.Messages[0].Body
 
-	log = zerolog.Ctx(ctx).With().Str("action", action).Logger()
-	ctx = log.WithContext(ctx)
-	zerolog.Ctx(ctx).Info().Msg("received {action} message from queue")
+	newdeps := deps
+	newlog := deps.logger.With().Str("action", action).Logger()
+	newdeps.logger = &newlog
+	sublog = &newlog
+
+	sublog.Info().Msg("received {action} message from queue")
+
 	taskStart := time.Now()
 
 	// go handle whatever type of queued task this is
@@ -211,41 +160,42 @@ func getTask(ctx context.Context, queueName string) (bool, error) {
 	//  true, nil means processed
 	switch action {
 	case "eod":
-		success, err = perform_tickers_eod(ctx, body)
+		success, err = perform_tickers_eod(newdeps, body)
 	case "intraday":
-		success, err = perform_tickers_intraday(ctx, body)
+		success, err = perform_tickers_intraday(newdeps, body)
 	case "news":
-		success, err = perform_tickers_news(ctx, body)
+		success, err = perform_tickers_news(newdeps, body)
 	case "financials":
-		success, err = perform_tickers_financials(ctx, body)
+		success, err = perform_tickers_financials(newdeps, body)
 	case "favicon":
-		success, err = perform_tickers_favicon(ctx, body)
+		success, err = perform_tickers_favicon(newdeps, body)
 	default:
 		success = false
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
-		deleteTask(ctx, messageHandle, queueURL, taskError)
+		deleteTask(newdeps, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 
 	if success {
 		// task handled, delete message from queue
-		log.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("another '{action}' message handled successfully, took {response_time} ns")
-		deleteTask(ctx, messageHandle, queueURL, taskError)
+		sublog.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("another '{action}' message handled successfully, took {response_time} ns")
+		deleteTask(newdeps, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 	if err != nil {
 		taskError = "failed to process message, retrying won't help, deleting unprocessable task"
-		log.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("failed to process '{action}' message successfully ({error}), but retryable so leaving for another attempt")
-		deleteTask(ctx, messageHandle, queueURL, taskError)
+		sublog.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("failed to process '{action}' message successfully ({error}), but retryable so leaving for another attempt")
+		deleteTask(newdeps, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 
-	zerolog.Ctx(ctx).Info().Msg("failed to process '{action}' message successfully, but retryable so leaving for another attempt")
+	sublog.Info().Msg("failed to process '{action}' message successfully, but retryable so leaving for another attempt")
 	return false, nil
 }
 
-func deleteTask(ctx context.Context, messageHandle, queueURL *string, taskError string) (bool, error) {
-	awssess := ctx.Value(ContextKey("awssess")).(*session.Session)
+func deleteTask(deps *Dependencies, messageHandle, queueURL *string, taskError string) (bool, error) {
+	awssess := deps.awssess
+
 	awssvc := sqs.New(awssess)
 
 	_, err := awssvc.DeleteMessage(&sqs.DeleteMessageInput{

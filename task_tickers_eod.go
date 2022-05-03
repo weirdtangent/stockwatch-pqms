@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 )
 
@@ -12,7 +11,7 @@ type TickersEODTask struct {
 	Offset     int    `json:"offset"`
 }
 
-func perform_tickers_eod(ctx context.Context, body *string) (bool, error) {
+func perform_tickers_eod(deps *Dependencies, body *string) (bool, error) {
 	if body != nil {
 		return false, fmt.Errorf("just testing")
 	}

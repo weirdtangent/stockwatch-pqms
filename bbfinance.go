@@ -1,13 +1,10 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
 	"github.com/weirdtangent/bbfinance"
 )
 
@@ -25,14 +22,15 @@ type Financials struct {
 	UpdateDatetime sql.NullTime `db:"update_datetime"`
 }
 
-func (f *Financials) createOrUpdate(ctx context.Context) error {
-	db := ctx.Value(ContextKey("db")).(*sqlx.DB)
+func (f *Financials) createOrUpdate(deps *Dependencies) error {
+	db := deps.db
+	sublog := deps.logger
 
 	var insertOrUpdate = "INSERT INTO financials SET ticker_id=?, form_name=?, form_term_name=?, chart_name=?, chart_datetime=?, chart_type=?, is_percentage=?, chart_value=?, create_datetime=now() ON DUPLICATE KEY UPDATE chart_value=?, update_datetime=now()"
 
 	_, err := db.Exec(insertOrUpdate, f.TickerId, f.FormName, f.FormTermName, f.ChartName, f.ChartDatetime, f.ChartType, f.IsPercentage, f.ChartValue, f.ChartValue)
 	if err != nil {
-		zerolog.Ctx(ctx).Fatal().Err(err).
+		sublog.Fatal().Err(err).
 			Str("table_name", "financials").
 			Msg("Failed on INSERT OR UPDATE")
 		return err
@@ -47,14 +45,17 @@ var (
 	}
 )
 
-func loadBBfinancials(ctx context.Context, ticker Ticker) error {
-	apiKey := ctx.Value(ContextKey("bbfinance_apikey")).(string)
-	apiHost := ctx.Value(ContextKey("bbfinance_apihost")).(string)
+func loadBBfinancials(deps *Dependencies, ticker Ticker) error {
+	secrets := deps.secrets
+	sublog := deps.logger
+
+	apiKey := secrets["bbfinance_rapidapi_key"]
+	apiHost := secrets["bbfinance_rapidapi_host"]
 
 	var err error
 
 	autoCompleteResponse := bbfinance.BBAutoCompleteResponse{}
-	autoCompleteResponse, err = bbfinance.BBAutoComplete(ctx, apiKey, apiHost, ticker.TickerSymbol)
+	autoCompleteResponse, err = bbfinance.BBAutoComplete(sublog, apiKey, apiHost, ticker.TickerSymbol)
 	if err != nil {
 		return err
 	}
@@ -64,19 +65,19 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 			continue
 		}
 		id := result.Id
-		financialsResponse, err := bbfinance.BBGetFinancials(ctx, apiKey, apiHost, id)
+		financialsResponse, err := bbfinance.BBGetFinancials(sublog, apiKey, apiHost, id)
 		if err != nil || len(financialsResponse.Results) == 0 {
-			zerolog.Ctx(ctx).Error().Err(err).Str("id", id).Msg("failed to get financials from {id}")
+			sublog.Error().Err(err).Str("id", id).Msg("failed to get financials from {id}")
 			return err
 		}
-		zerolog.Ctx(ctx).Info().Msg("pulling financials for {symbol}")
+		sublog.Info().Msg("pulling financials for {symbol}")
 		for _, financialResult := range financialsResponse.Results {
 			resultName := financialResult.Name // "Income Statement", "Balance Sheet", "Cash Flow"
 			for _, financialSheet := range financialResult.TimeBasedSheets {
 				sheetName := financialSheet.Name // quarterly, annual, etc
 				dateFormat, ok := chart_date_format[sheetName]
 				if !ok {
-					zerolog.Ctx(ctx).Error().Err(fmt.Errorf("invalid sheetName '%s'", sheetName)).Msg("could not load financials")
+					sublog.Error().Err(fmt.Errorf("invalid sheetName '%s'", sheetName)).Msg("could not load financials")
 					return fmt.Errorf("invalid sheetName")
 				}
 				for _, financialChartData := range financialSheet.ChartData {
@@ -93,13 +94,13 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 						}
 						datetime, err := time.Parse(dateFormat, financialSheet.ColHeadings[colKey])
 						if err != nil {
-							zerolog.Ctx(ctx).Error().Err(err).Msg("failed to parse date on financial chart data")
+							sublog.Error().Err(err).Msg("failed to parse date on financial chart data")
 						} else {
 							chartDatetime := sql.NullTime{Valid: err == nil, Time: datetime}
 							financials := Financials{0, ticker.TickerId, resultName, sheetName, chartName, chartDatetime, chartType, isPercentage, colData, sql.NullTime{}, sql.NullTime{}}
-							err = financials.createOrUpdate(ctx)
+							err = financials.createOrUpdate(deps)
 							if err != nil {
-								zerolog.Ctx(ctx).Error().Err(err).Msg("failed to create/update financial data")
+								sublog.Error().Err(err).Msg("failed to create/update financial data")
 							}
 						}
 					}
@@ -111,14 +112,17 @@ func loadBBfinancials(ctx context.Context, ticker Ticker) error {
 	return nil
 }
 
-func loadBBstatistics(ctx context.Context, ticker Ticker) error {
-	apiKey := ctx.Value(ContextKey("bbfinance_apikey")).(string)
-	apiHost := ctx.Value(ContextKey("bbfinance_apihost")).(string)
+func loadBBstatistics(deps *Dependencies, ticker Ticker) error {
+	secrets := deps.secrets
+	sublog := deps.logger
+
+	apiKey := secrets["bbfinance_rapidapi_key"]
+	apiHost := secrets["bbfinance_rapidapi_host"]
 
 	var err error
 
 	autoCompleteResponse := bbfinance.BBAutoCompleteResponse{}
-	autoCompleteResponse, err = bbfinance.BBAutoComplete(ctx, apiKey, apiHost, ticker.TickerSymbol)
+	autoCompleteResponse, err = bbfinance.BBAutoComplete(sublog, apiKey, apiHost, ticker.TickerSymbol)
 	if err != nil {
 		return err
 	}
@@ -128,22 +132,22 @@ func loadBBstatistics(ctx context.Context, ticker Ticker) error {
 			continue
 		}
 		id := result.Id
-		statisticsResponse, err := bbfinance.BBGetStatistics(ctx, apiKey, apiHost, id)
+		statisticsResponse, err := bbfinance.BBGetStatistics(sublog, apiKey, apiHost, id)
 		if err != nil || len(statisticsResponse.Results) == 0 {
-			zerolog.Ctx(ctx).Error().Err(err).Str("id", id).Msg("failed to get statistics from {id}")
+			sublog.Error().Err(err).Str("id", id).Msg("failed to get statistics from {id}")
 			return err
 		}
-		zerolog.Ctx(ctx).Info().Msg("pulling statistics for {symbol}")
+		sublog.Info().Msg("pulling statistics for {symbol}")
 		for _, statisticsResults := range statisticsResponse.Results {
 			resultName := statisticsResults.Name // "Key Statistics"
 			if resultName != "Key Statistics" {
-				zerolog.Ctx(ctx).Error().Str("result_name", resultName).Msg("ignoring statistics in this result")
+				sublog.Error().Str("result_name", resultName).Msg("ignoring statistics in this result")
 				continue
 			}
 			for _, statisticEntry := range statisticsResults.Table {
-				err = ticker.createOrUpdateAttribute(ctx, statisticEntry.Name, statisticEntry.Comment, statisticEntry.Value)
+				err = ticker.createOrUpdateAttribute(deps, statisticEntry.Name, statisticEntry.Comment, statisticEntry.Value)
 				if err != nil {
-					zerolog.Ctx(ctx).Error().Err(err).Msg("failed to create/update statistic")
+					sublog.Error().Err(err).Msg("failed to create/update statistic")
 				}
 			}
 		}
