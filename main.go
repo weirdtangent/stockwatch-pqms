@@ -11,26 +11,29 @@ import (
 )
 
 const (
-	startSleepTime = 5.0
-	maxSleepTime   = 600.0
+	startSleepTime        = 5.0   // seconds
+	maxSleepTime          = 600.0 // seconds
+	highRateOfQueueChecks = 60    // at 60 checks/min we stop and take a longPause
+	longPause             = 10    // minutes
 
 	awsRegion            = "us-east-1"
 	awsPrivateBucketName = "stockwatch-private"
 
 	sqlDateTime = "2006-01-02 15:04:05"
 
+	minTickerFavIconDelay    = 60 * 24 * 30 // 30 days
+	minTickerFinancialsDelay = 60 * 1       // 1 hour
+	minTickerNewsDelay       = 60 * 1       // 1 hour
+
 	debugging = true
 )
 
 var (
-	// regexs
 	absoluteUrl         = regexp.MustCompile(`^https?\://\S+`)
 	relativeProtocolUrl = regexp.MustCompile(`^//\S+`)
 	getProtocolUrl      = regexp.MustCompile(`^https?\:`)
 	relativePathUrl     = regexp.MustCompile(`^/[^/]\S+`)
 )
-
-type ContextKey string
 
 func main() {
 	deps := &Dependencies{}
@@ -54,11 +57,12 @@ func mainLoop(deps *Dependencies) {
 	count := 0
 	for {
 		// if we checked more than 1/sec over the last minute
-		// force a 5 minute pause and set sleep to max!
+		// force a 10 minute pause and set sleep to max!
+		// otherwise, after a min of watching, restart timer and count
 		if time.Since(timer).Minutes() > 1.0 {
-			if count > 60 {
+			if count > highRateOfQueueChecks {
 				sublog.Warn().Int("count", count).Float64("min", time.Since(timer).Minutes()).Msg("exceeded max check, {count} over last {min} mins, pausing!")
-				time.Sleep(5 * time.Minute)
+				time.Sleep(longPause * time.Minute)
 				sleepTime = maxSleepTime
 			}
 			count = 0
@@ -76,14 +80,14 @@ func mainLoop(deps *Dependencies) {
 		// even sleep, just go check for another task right away
 		if anyProcessed {
 			sleepTime = startSleepTime
+			time.Sleep(time.Second)
 		} else {
 			lastSleepTime := sleepTime
 			sleepTime = math.Round(math.Min(sleepTime*2, maxSleepTime)*100) / 100
 			if lastSleepTime != sleepTime {
 				sublog.Info().Float64("sleep_time", sleepTime).Msg("sleep timer extended to {sleepTime} seconds")
 			}
-			s, _ := time.ParseDuration(fmt.Sprintf("%.0fs", sleepTime))
-			time.Sleep(s)
+			time.Sleep(time.Duration(sleepTime) * time.Second)
 		}
 	}
 }
@@ -142,12 +146,8 @@ func getTask(deps *Dependencies, queueName string) (bool, error) {
 	action := *(actionAttr.StringValue)
 	body := msgResult.Messages[0].Body
 
-	newdeps := deps
-	newlog := deps.logger.With().Str("action", action).Logger()
-	newdeps.logger = &newlog
-	sublog = &newlog
-
-	sublog.Info().Msg("received {action} message from queue")
+	tasklog := sublog.With().Str("action", action).Logger()
+	tasklog.Info().Msg("received {action} message from queue")
 
 	taskStart := time.Now()
 
@@ -160,36 +160,36 @@ func getTask(deps *Dependencies, queueName string) (bool, error) {
 	//  true, nil means processed
 	switch action {
 	case "eod":
-		success, err = perform_tickers_eod(newdeps, body)
+		success, err = perform_tickers_eod(deps, tasklog, body)
 	case "intraday":
-		success, err = perform_tickers_intraday(newdeps, body)
+		success, err = perform_tickers_intraday(deps, tasklog, body)
 	case "news":
-		success, err = perform_tickers_news(newdeps, body)
+		success, err = perform_tickers_news(deps, tasklog, body)
 	case "financials":
-		success, err = perform_tickers_financials(newdeps, body)
+		success, err = perform_tickers_financials(deps, tasklog, body)
 	case "favicon":
-		success, err = perform_tickers_favicon(newdeps, body)
+		success, err = perform_tickers_favicon(deps, tasklog, body)
 	default:
 		success = false
 		taskError = fmt.Sprintf("unknown action string (%s) in queued task", action)
-		deleteTask(newdeps, messageHandle, queueURL, taskError)
+		deleteTask(deps, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 
 	if success {
 		// task handled, delete message from queue
-		sublog.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("another '{action}' message handled successfully, took {response_time} ns")
-		deleteTask(newdeps, messageHandle, queueURL, taskError)
+		tasklog.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("another '{action}' message handled successfully, took {response_time} ns")
+		deleteTask(deps, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 	if err != nil {
 		taskError = "failed to process message, retrying won't help, deleting unprocessable task"
-		sublog.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("failed to process '{action}' message successfully ({error}), but retryable so leaving for another attempt")
-		deleteTask(newdeps, messageHandle, queueURL, taskError)
+		tasklog.Info().Int64("response_time", time.Since(taskStart).Nanoseconds()).Msg("failed to process '{action}' message successfully ({error}), but retryable so leaving for another attempt")
+		deleteTask(deps, messageHandle, queueURL, taskError)
 		return true, nil
 	}
 
-	sublog.Info().Msg("failed to process '{action}' message successfully, but retryable so leaving for another attempt")
+	tasklog.Info().Msg("failed to process '{action}' message successfully, but retryable so leaving for another attempt")
 	return false, nil
 }
 

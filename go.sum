@@ -8,6 +8,8 @@ github.com/aws/aws-sdk-go v1.44.4 h1:ePN0CVJMdiz2vYUcJH96eyxRrtKGSDMgyhP6rah2OgE
 github.com/aws/aws-sdk-go v1.44.4/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX4oIKwKHZo=
 github.com/aws/aws-sdk-go v1.44.5 h1:T4mckpWUfplPG4GA3FDWDCM1QaCzisjGzzeCVBhHKwQ=
 github.com/aws/aws-sdk-go v1.44.5/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX4oIKwKHZo=
+github.com/aws/aws-sdk-go v1.44.8 h1:Fc8lFiP97MjB/BFaeZ7ixAjkqrNoic/qvlRqqJb5cxY=
+github.com/aws/aws-sdk-go v1.44.8/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX4oIKwKHZo=
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -38,6 +40,8 @@ github.com/weirdtangent/bbfinance v1.0.0 h1:6DIxtFdl+s9GNfrghobqEus+AAb+1yBGFmYD
 github.com/weirdtangent/bbfinance v1.0.0/go.mod h1:zsm1jSBGMUkdt6jmBqqRLU1CRR23gDPWYsItxP3OjZk=
 github.com/weirdtangent/bbfinance v1.0.1 h1:F7WX1OrEmriOcbNVnpROt0teL1zEMhVaPIXHC7JDbbQ=
 github.com/weirdtangent/bbfinance v1.0.1/go.mod h1:zsm1jSBGMUkdt6jmBqqRLU1CRR23gDPWYsItxP3OjZk=
+github.com/weirdtangent/bbfinance v1.0.2 h1:wLwqxBUYPP0DW5kx4jJU9qNlQckS6WOp+tIWAqISCn8=
+github.com/weirdtangent/bbfinance v1.0.2/go.mod h1:zsm1jSBGMUkdt6jmBqqRLU1CRR23gDPWYsItxP3OjZk=
 github.com/weirdtangent/msfinance v0.1.1 h1:tRFf4abuo3TumbVXLvL8/VZdB4PZKagEdMVhb/uiI1E=
 github.com/weirdtangent/msfinance v0.1.1/go.mod h1:oASoMSM/Hosz7dbVg2ALDRC6EQKcIqDiWBy9owztvNc=
 github.com/weirdtangent/msfinance v1.0.0 h1:d868/eEKLBN9n2pHVzM7qKoJhgD6kI8rRvMJrR0zreg=

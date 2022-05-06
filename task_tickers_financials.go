@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
-const (
-	minTickerFinancialsDelay = 60
-)
-
-func perform_tickers_financials(deps *Dependencies, body *string) (bool, error) {
+func perform_tickers_financials(deps *Dependencies, sublog zerolog.Logger, body *string) (bool, error) {
 	db := deps.db
-	sublog := deps.logger
 
 	if body == nil || *body == "" {
 		return false, fmt.Errorf("missing task body")
@@ -37,8 +34,8 @@ func perform_tickers_financials(deps *Dependencies, body *string) (bool, error) 
 		return false, err
 	}
 
-	newlog := sublog.With().Str("symbol", ticker.TickerSymbol).Logger()
-	sublog = &newlog
+	sublog = sublog.With().Str("symbol", ticker.TickerSymbol).Logger()
+	sublog.Info().Msg("got task to possibly update financials for {symbol}")
 
 	lastdone := LastDone{Activity: "ticker_financials", UniqueKey: ticker.TickerSymbol, LastStatus: "failed"}
 	_ = lastdone.getByActivity(db)
@@ -50,7 +47,7 @@ func perform_tickers_financials(deps *Dependencies, body *string) (bool, error) 
 
 	// go get financials
 	sublog.Info().Msg("pulling financials for {symbol}")
-	err = loadBBfinancials(deps, ticker)
+	err = loadBBFinancials(deps, ticker)
 	if err != nil {
 		lastdone.LastDoneDatetime = sql.NullTime{Valid: true, Time: time.Now()}
 		lderr := lastdone.createOrUpdate(db)
@@ -62,7 +59,7 @@ func perform_tickers_financials(deps *Dependencies, body *string) (bool, error) 
 
 	// go get statistics
 	sublog.Info().Msg("pulling statistics for {symbol}")
-	err = loadBBstatistics(deps, ticker)
+	err = loadBBStatistics(deps, ticker)
 	if err == nil {
 		lastdone.LastStatus = "success"
 	}

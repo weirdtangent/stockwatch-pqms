@@ -45,7 +45,7 @@ var (
 	}
 )
 
-func loadBBfinancials(deps *Dependencies, ticker Ticker) error {
+func loadBBFinancials(deps *Dependencies, ticker Ticker) error {
 	secrets := deps.secrets
 	sublog := deps.logger
 
@@ -112,9 +112,9 @@ func loadBBfinancials(deps *Dependencies, ticker Ticker) error {
 	return nil
 }
 
-func loadBBstatistics(deps *Dependencies, ticker Ticker) error {
+func loadBBStatistics(deps *Dependencies, ticker Ticker) error {
 	secrets := deps.secrets
-	sublog := deps.logger
+	sublog := deps.logger.With().Str("symbol", ticker.TickerSymbol).Logger()
 
 	apiKey := secrets["bbfinance_rapidapi_key"]
 	apiHost := secrets["bbfinance_rapidapi_host"]
@@ -122,7 +122,7 @@ func loadBBstatistics(deps *Dependencies, ticker Ticker) error {
 	var err error
 
 	autoCompleteResponse := bbfinance.BBAutoCompleteResponse{}
-	autoCompleteResponse, err = bbfinance.BBAutoComplete(sublog, apiKey, apiHost, ticker.TickerSymbol)
+	autoCompleteResponse, err = bbfinance.BBAutoComplete(&sublog, apiKey, apiHost, ticker.TickerSymbol)
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func loadBBstatistics(deps *Dependencies, ticker Ticker) error {
 			continue
 		}
 		id := result.Id
-		statisticsResponse, err := bbfinance.BBGetStatistics(sublog, apiKey, apiHost, id)
+		statisticsResponse, err := bbfinance.BBGetStatistics(&sublog, apiKey, apiHost, id)
 		if err != nil || len(statisticsResponse.Results) == 0 {
 			sublog.Error().Err(err).Str("id", id).Msg("failed to get statistics from {id}")
 			return err
@@ -150,6 +150,64 @@ func loadBBstatistics(deps *Dependencies, ticker Ticker) error {
 					sublog.Error().Err(err).Msg("failed to create/update statistic")
 				}
 			}
+		}
+	}
+	return nil
+}
+
+func loadBBStories(deps *Dependencies, ticker Ticker) error {
+	secrets := deps.secrets
+	sublog := deps.logger.With().Str("symbol", ticker.TickerSymbol).Logger()
+
+	apiKey := secrets["bbfinance_rapidapi_key"]
+	apiHost := secrets["bbfinance_rapidapi_host"]
+
+	var err error
+
+	sourceId, err := getSourceId(deps, "Bloomberg")
+	if err != nil {
+		sublog.Error().Err(err).Msg("unknown source, skipping BB stories")
+		return err
+	}
+
+	autoCompleteResponse := bbfinance.BBAutoCompleteResponse{}
+	autoCompleteResponse, err = bbfinance.BBAutoComplete(&sublog, apiKey, apiHost, ticker.TickerSymbol)
+	if err != nil {
+		return err
+	}
+
+	for _, result := range autoCompleteResponse.Results {
+		if result.Symbol != ticker.TickerSymbol || result.Currency != "USD" {
+			continue
+		}
+		id := result.Id
+		storiesListResponse, err := bbfinance.BBGetStoriesList(&sublog, apiKey, apiHost, id, "STOCK")
+		if err != nil || len(storiesListResponse.Stories) == 0 {
+			sublog.Error().Err(err).Msg("failed to get stories for STOCK {symbol}")
+			return err
+		}
+		sublog.Info().Msg("pulling stories for {symbol}")
+		for _, story := range storiesListResponse.Stories {
+			if existingId, err := getArticleByExternalId(deps, story.InternalId); err != nil {
+				sublog.Info().Err(err).Str("existing_id", story.InternalId).Msg("failed to check for existing article by external id")
+			} else if existingId != 0 {
+				// already have this story saved
+				continue
+			} else {
+				article := Article{0, sourceId, story.InternalId, sql.NullTime{Valid: true, Time: time.Unix(story.Published, 0)}, sql.NullTime{Valid: true, Time: time.Unix(story.UpdatedAt, 0)}, story.Title, "", story.LongURL, story.ThumbnailImage, time.Now(), time.Now()}
+
+				err = article.createArticle(deps)
+				if err != nil {
+					sublog.Warn().Err(err).Msg("failed to write new story")
+				}
+
+				articleTicker := ArticleTicker{0, article.ArticleId, ticker.TickerSymbol, ticker.TickerId, time.Now(), time.Now()}
+				err = articleTicker.createArticleTicker(deps)
+				if err != nil {
+					sublog.Warn().Err(err).Msg("failed to write ticker(s) for new story")
+				}
+			}
+
 		}
 	}
 	return nil

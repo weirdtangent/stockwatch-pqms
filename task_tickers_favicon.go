@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/rs/zerolog"
 	"golang.org/x/net/html"
 )
 
@@ -21,13 +22,8 @@ type TaskTickerFavIconBody struct {
 	ExchangeId   uint64 `json:"exchange_id"`
 }
 
-const (
-	minTickerFavIconDelay = 60 * 24 * 30 // 30 days
-)
-
-func perform_tickers_favicon(deps *Dependencies, body *string) (bool, error) {
+func perform_tickers_favicon(deps *Dependencies, sublog zerolog.Logger, body *string) (bool, error) {
 	db := deps.db
-	sublog := deps.logger
 
 	if body == nil || *body == "" {
 		sublog.Error().Msg("missing task body")
@@ -53,9 +49,7 @@ func perform_tickers_favicon(deps *Dependencies, body *string) (bool, error) {
 		return true, err
 	}
 
-	newlog := sublog.With().Str("symbol", ticker.TickerSymbol).Logger()
-	sublog = &newlog
-
+	sublog = sublog.With().Str("symbol", ticker.TickerSymbol).Logger()
 	sublog.Info().Msg("got task to possibly update favicon for {symbol}")
 
 	// skip calling API if we've succeeded at this recently
@@ -67,14 +61,13 @@ func perform_tickers_favicon(deps *Dependencies, body *string) (bool, error) {
 	}
 
 	// go get favicon
-	err = saveFavIcon(deps, ticker)
+	err = saveFavIcon(deps, sublog, ticker)
 
 	return true, err
 }
 
-func saveFavIcon(deps *Dependencies, ticker Ticker) error {
+func saveFavIcon(deps *Dependencies, sublog zerolog.Logger, ticker Ticker) error {
 	awssess := deps.awssess
-	sublog := deps.logger
 
 	iconUrl := ""
 
