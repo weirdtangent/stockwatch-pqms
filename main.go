@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"regexp"
 	"time"
 
@@ -24,6 +26,7 @@ const (
 	minTickerFavIconDelay    = 60 * 24 * 30 // 30 days
 	minTickerFinancialsDelay = 60 * 1       // 1 hour
 	minTickerNewsDelay       = 60 * 1       // 1 hour
+	minTickerEODsDelay       = 60 * 24      // 24 hours
 
 	debugging = true
 )
@@ -159,8 +162,8 @@ func getTask(deps *Dependencies, queueName string) (bool, error) {
 	// false, nil means couldn't process now, but can try again
 	//  true, nil means processed
 	switch action {
-	case "eod":
-		success, err = perform_tickers_eod(deps, tasklog, body)
+	case "eods":
+		success, err = perform_tickers_eods(deps, tasklog, body)
 	case "intraday":
 		success, err = perform_tickers_intraday(deps, tasklog, body)
 	case "news":
@@ -209,4 +212,18 @@ func deleteTask(deps *Dependencies, messageHandle, queueURL *string, taskError s
 	}
 
 	return (taskError == ""), err
+}
+
+func saveExample(filename string, data interface{}) {
+	json, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+
+	f, err := os.Create("/www/stockwatch/static/examples/" + filename)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.Write(json)
 }

@@ -44,7 +44,6 @@ func perform_tickers_news(deps *Dependencies, sublog zerolog.Logger, body *strin
 	}
 
 	sublog = sublog.With().Str("symbol", ticker.TickerSymbol).Logger()
-
 	sublog.Info().Msg("got task to possibly update news for {symbol}")
 
 	// skip calling API if we've succeeded at this recently
