@@ -45,7 +45,6 @@ func loadMSNews(deps *Dependencies, ticker Ticker) error {
 			if err != nil {
 				return err
 			}
-			saveExample("ms-finance:news-list:"+ticker.TickerSymbol+".json", newsListResponse)
 
 			for _, story := range newsListResponse {
 				sourceId, err := getSourceId(deps, story.SourceId)

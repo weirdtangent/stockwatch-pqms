@@ -70,7 +70,6 @@ func loadBBFinancials(deps *Dependencies, ticker Ticker) error {
 			sublog.Error().Err(err).Str("id", id).Msg("failed to get financials from {id}")
 			return err
 		}
-		saveExample("bb-finance:stock-get-financials:"+ticker.TickerSymbol+".json", financialsResponse)
 		sublog.Info().Msg("pulling financials for {symbol}")
 		for _, financialResult := range financialsResponse.Results {
 			resultName := financialResult.Name // "Income Statement", "Balance Sheet", "Cash Flow"
@@ -138,7 +137,6 @@ func loadBBStatistics(deps *Dependencies, ticker Ticker) error {
 			sublog.Error().Err(err).Str("id", id).Msg("failed to get statistics from {id}")
 			return err
 		}
-		saveExample("bb-finance:stock-get-statistics:"+ticker.TickerSymbol+".json", statisticsResponse)
 		sublog.Info().Msg("pulling statistics for {symbol}")
 		for _, statisticsResults := range statisticsResponse.Results {
 			resultName := statisticsResults.Name // "Key Statistics"

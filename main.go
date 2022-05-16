@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"regexp"
 	"time"
 
@@ -212,18 +210,4 @@ func deleteTask(deps *Dependencies, messageHandle, queueURL *string, taskError s
 	}
 
 	return (taskError == ""), err
-}
-
-func saveExample(filename string, data interface{}) {
-	json, err := json.Marshal(data)
-	if err != nil {
-		return
-	}
-
-	f, err := os.Create("/www/stockwatch/static/examples/" + filename)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	f.Write(json)
 }
