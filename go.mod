@@ -12,5 +12,5 @@ require (
 	github.com/weirdtangent/msfinance v1.0.1
 	github.com/weirdtangent/myaws v1.0.6
 	github.com/weirdtangent/yhfinance v1.2.3
-	golang.org/x/net v0.32.0
+	golang.org/x/net v0.33.0
 )
