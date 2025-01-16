@@ -3,7 +3,7 @@ module github.weirdtangent/stockwatch-pqms
 go 1.13
 
 require (
-	github.com/aws/aws-sdk-go v1.55.5
+	github.com/aws/aws-sdk-go v1.55.6
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mattn/go-colorable v0.1.14 // indirect
