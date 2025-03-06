@@ -1,6 +1,6 @@
 module github.weirdtangent/stockwatch-pqms
 
-go 1.21
+go 1.23.0
 
 toolchain go1.23.3
 
@@ -12,7 +12,7 @@ require (
 	github.com/weirdtangent/msfinance v1.0.2
 	github.com/weirdtangent/myaws v1.0.7
 	github.com/weirdtangent/yhfinance v1.3.2
-	golang.org/x/net v0.35.0
+	golang.org/x/net v0.37.0
 )
 
 require (
@@ -22,5 +22,5 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 )
