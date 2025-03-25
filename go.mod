@@ -7,7 +7,7 @@ toolchain go1.23.3
 require (
 	github.com/aws/aws-sdk-go v1.55.6
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/rs/zerolog v1.33.0
+	github.com/rs/zerolog v1.34.0
 	github.com/weirdtangent/bbfinance v1.0.3
 	github.com/weirdtangent/msfinance v1.0.2
 	github.com/weirdtangent/myaws v1.0.7
