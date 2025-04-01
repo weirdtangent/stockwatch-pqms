@@ -12,7 +12,7 @@ require (
 	github.com/weirdtangent/msfinance v1.0.2
 	github.com/weirdtangent/myaws v1.0.7
 	github.com/weirdtangent/yhfinance v1.3.2
-	golang.org/x/net v0.37.0
+	golang.org/x/net v0.38.0
 )
 
 require (
